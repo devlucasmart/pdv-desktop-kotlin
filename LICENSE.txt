@@ -1,0 +1,84 @@
+LICENÇA DE USO - PDV DESKTOP
+
+Copyright © 2026 PDV Systems. Todos os direitos reservados.
+
+TERMOS E CONDIÇÕES DE USO
+
+1. CONCESSÃO DE LICENÇA
+   Este software é fornecido para uso pessoal e comercial, permitindo:
+   - Instalação em múltiplos computadores
+   - Uso comercial sem restrições
+   - Modificação do código fonte (se aplicável)
+   - Distribuição interna na organização
+
+2. RESTRIÇÕES
+   NÃO é permitido:
+   - Revender este software como produto próprio
+   - Remover ou modificar avisos de copyright
+   - Usar o nome "PDV Systems" sem autorização
+   - Distribuir comercialmente sem autorização
+
+3. ISENÇÃO DE GARANTIAS
+   Este software é fornecido "COMO ESTÁ", sem garantias de qualquer tipo,
+   expressas ou implícitas, incluindo, mas não se limitando às garantias
+   de comercialização, adequação a uma finalidade específica e não violação.
+
+4. LIMITAÇÃO DE RESPONSABILIDADE
+   Em nenhuma circunstância os autores ou detentores de direitos autorais
+   serão responsáveis por quaisquer reclamações, danos ou outras responsabilidades,
+   seja em ação de contrato, delito ou de outra forma, decorrentes de,
+   fora de ou em conexão com o software ou o uso ou outras negociações no software.
+
+5. SUPORTE
+   O suporte técnico é fornecido conforme disponibilidade.
+   Contato: contato@pdvsystems.com
+
+6. ATUALIZAÇÕES
+   Atualizações e melhorias podem ser fornecidas periodicamente.
+   A instalação de atualizações é recomendada mas opcional.
+
+7. DADOS E PRIVACIDADE
+   Este software armazena dados localmente no computador do usuário.
+   Nenhum dado é enviado para servidores externos sem consentimento.
+
+8. SEGURANÇA
+   O usuário é responsável por:
+   - Manter backups regulares do banco de dados
+   - Configurar senhas fortes para usuários
+   - Implementar medidas de segurança adicionais conforme necessário
+
+9. USO COMERCIAL
+   Este software pode ser usado livremente para fins comerciais,
+   incluindo estabelecimentos comerciais, empresas e organizações.
+
+10. CÓDIGO ABERTO
+    Componentes de código aberto usados neste software mantêm suas
+    respectivas licenças. Consulte a documentação para detalhes.
+
+ACEITAÇÃO DOS TERMOS
+Ao instalar e usar este software, você concorda com todos os termos
+e condições aqui descritos.
+
+---
+
+INFORMAÇÕES DO SOFTWARE
+
+Nome: PDV Desktop
+Versão: 1.0.0
+Data de Lançamento: 09/03/2026
+Desenvolvido com: Kotlin, Compose for Desktop, SQLite
+
+Características:
+- Sistema de Login e Permissões
+- Gerenciamento de Produtos
+- Ponto de Venda (PDV)
+- Relatórios e Estatísticas
+- Calculadora de Troco
+- Banco de Dados SQLite Local
+
+Contato e Suporte:
+Email: contato@pdvsystems.com
+Website: www.pdvsystems.com (exemplo)
+
+PDV Systems - Soluções em Ponto de Venda
+

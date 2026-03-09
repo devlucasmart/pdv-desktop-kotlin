@@ -1,0 +1,266 @@
+╔══════════════════════════════════════════════════════════════════╗
+║                                                                  ║
+║      📦 GUIA RÁPIDO - GERAÇÃO DE INSTALADORES 📦                ║
+║                                                                  ║
+╚══════════════════════════════════════════════════════════════════╝
+
+✅ SISTEMA PRONTO PARA GERAR INSTALADORES!
+
+
+█ MÉTODO MAIS FÁCIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Linux/macOS:
+    ./build-installer.sh
+
+Windows:
+    build-installer.bat
+
+→ O script faz tudo automaticamente!
+
+
+█ FORMATOS DISPONÍVEIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📦 .deb     →  Ubuntu, Debian, Mint, Pop!_OS
+📦 .rpm     →  Fedora, RedHat, CentOS, openSUSE
+🍎 .dmg     →  macOS 10.14+
+🪟 .msi     →  Windows 7, 8, 10, 11 (Installer)
+🪟 .exe     →  Windows 7, 8, 10, 11 (Executável)
+
+
+█ COMANDOS MANUAIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Instalador Linux Debian/Ubuntu
+./gradlew packageDeb
+
+# Instalador Linux Fedora/RedHat
+./gradlew packageRpm
+
+# Instalador macOS
+./gradlew packageDmg
+
+# Instalador Windows MSI
+./gradlew packageMsi
+
+# Executável Windows EXE
+./gradlew packageExe
+
+# TODOS os instaladores
+./gradlew packageDeb packageRpm packageDmg packageMsi packageExe
+
+
+█ ONDE FICAM OS ARQUIVOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+build/compose/binaries/main/
+├── deb/
+│   └── pdv-desktop_1.0.0-1_amd64.deb
+├── rpm/
+│   └── pdv-desktop-1.0.0-1.x86_64.rpm
+├── dmg/
+│   └── PDV Desktop-1.0.0.dmg
+├── msi/
+│   └── PDV Desktop-1.0.0.msi
+└── exe/
+    └── PDV Desktop-1.0.0.exe
+
+
+█ TAMANHOS APROXIMADOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+.deb    →  60-80 MB
+.rpm    →  60-80 MB
+.dmg    →  70-90 MB
+.msi    →  50-70 MB
+.exe    →  50-70 MB
+
+
+█ INSTALAÇÃO PARA USUÁRIOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Linux (DEB):
+    sudo dpkg -i pdv-desktop_1.0.0-1_amd64.deb
+
+Linux (RPM):
+    sudo rpm -i pdv-desktop-1.0.0-1.x86_64.rpm
+
+macOS:
+    1. Abrir o .dmg
+    2. Arrastar para Applications
+
+Windows:
+    1. Clique duplo no .msi ou .exe
+    2. Seguir o assistente
+
+
+█ PRÉ-REQUISITOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Java JDK 17+
+✅ Projeto compilado
+✅ ~500 MB de espaço livre
+✅ Conexão com internet (primeira vez)
+
+
+█ CHECKLIST ANTES DE GERAR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[ ] Compilação funcionando (./gradlew build)
+[ ] Testes passando
+[ ] Versão atualizada em build.gradle.kts
+[ ] LICENSE.txt presente
+[ ] Java 17+ instalado
+
+
+█ EXEMPLO COMPLETO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# 1. Compilar projeto
+./gradlew clean build
+
+# 2. Gerar instalador (exemplo: DEB para Ubuntu)
+./gradlew packageDeb
+
+# 3. Arquivo gerado em:
+# build/compose/binaries/main/deb/pdv-desktop_1.0.0-1_amd64.deb
+
+# 4. Testar instalação (opcional)
+sudo dpkg -i build/compose/binaries/main/deb/*.deb
+
+# 5. Executar
+pdv-desktop
+
+
+█ DISTRIBUIR INSTALADORES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Opções:
+
+1. 🌐 Servidor Web
+   - Hospedar arquivos para download
+   - Ex: https://seusite.com/downloads/
+
+2. 📧 Email
+   - Enviar diretamente aos usuários
+   - Incluir instruções de instalação
+
+3. 💿 Mídia Física
+   - Gravar em CD/DVD/USB
+   - Distribuir fisicamente
+
+4. 📦 GitHub Releases
+   - Criar release no GitHub
+   - Upload dos instaladores
+
+5. ☁️ Cloud Storage
+   - Google Drive, Dropbox, OneDrive
+   - Compartilhar links
+
+
+█ PROBLEMAS COMUNS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ "Java not found"
+   → Instale Java 17+: sudo apt install openjdk-17-jdk
+
+❌ "Build failed"
+   → Execute: ./gradlew clean build --stacktrace
+
+❌ "Permission denied"
+   → Execute: chmod +x build-installer.sh
+
+❌ Instalador muito grande
+   → Normal! Inclui Java Runtime (~40-50 MB)
+
+❌ "Unknown publisher" (Windows)
+   → Normal se não for assinado
+   → Clique "More info" → "Run anyway"
+
+
+█ VANTAGENS DOS INSTALADORES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Java Runtime INCLUÍDO
+   → Usuário NÃO precisa instalar Java separadamente
+
+✅ Instalação SIMPLES
+   → Apenas clique duplo
+
+✅ Atalhos AUTOMÁTICOS
+   → Aparece no menu do sistema
+
+✅ Desinstalação LIMPA
+   → Remove tudo corretamente
+
+✅ Atualização FÁCIL
+   → Instalar nova versão sobre a antiga
+
+✅ Profissional
+   → Parece software comercial
+
+
+█ O QUE ESTÁ INCLUÍDO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Aplicativo PDV Desktop
+✅ Java Runtime Environment (JRE)
+✅ Bibliotecas (Compose, SQLite, etc)
+✅ Licença (LICENSE.txt)
+✅ Ícones
+✅ Scripts de inicialização
+✅ Metadados do pacote
+
+❌ Banco de dados (criado na 1ª execução)
+❌ Configurações do usuário
+❌ Código fonte
+
+
+█ ARQUIVOS CRIADOS PELO SISTEMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Novos arquivos no projeto:
+
+✅ build-installer.sh       → Script Linux/macOS
+✅ build-installer.bat      → Script Windows
+✅ LICENSE.txt              → Licença do software
+✅ GUIA_INSTALADORES.md     → Documentação completa
+✅ build.gradle.kts         → Configuração atualizada
+
+
+█ PRÓXIMOS PASSOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. 📝 Leia: GUIA_INSTALADORES.md (documentação completa)
+
+2. 🔨 Compile: ./gradlew clean build
+
+3. 📦 Gere: ./build-installer.sh
+
+4. 🧪 Teste: Instale em VM limpa
+
+5. 🚀 Distribua: Envie aos usuários
+
+
+█ INFORMAÇÕES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Nome:        PDV Desktop
+Versão:      1.0.0
+Licença:     Ver LICENSE.txt
+Requisitos:  Java Runtime INCLUÍDO no instalador
+Tamanho:     50-90 MB (varia por plataforma)
+
+
+╔══════════════════════════════════════════════════════════════════╗
+║                                                                  ║
+║  ✅ TUDO PRONTO PARA GERAR INSTALADORES!                        ║
+║                                                                  ║
+║  Execute: ./build-installer.sh                                   ║
+║                                                                  ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Documentação completa: GUIA_INSTALADORES.md
+Versão: 1.0.0 | Data: 2026-03-09
+

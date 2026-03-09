@@ -1,0 +1,219 @@
+╔══════════════════════════════════════════════════════════════════╗
+║                                                                  ║
+║        PDV DESKTOP - COMO EXECUTAR O SISTEMA                    ║
+║                                                                  ║
+╚══════════════════════════════════════════════════════════════════╝
+
+█ PASSO 1: VERIFICAR SE O JAVA ESTÁ INSTALADO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Abra o terminal e digite:
+
+    java -version
+
+→ Se aparecer algo como "openjdk version 17..." está OK!
+→ Se der erro "comando não encontrado", precisa instalar o Java.
+
+
+█ PASSO 2: INSTALAR O JAVA (se necessário)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Ubuntu/Debian/Mint:
+    sudo apt update
+    sudo apt install openjdk-17-jdk
+
+Fedora:
+    sudo dnf install java-17-openjdk
+
+Arch Linux:
+    sudo pacman -S jdk-openjdk
+
+Manjaro:
+    sudo pamac install jdk-openjdk
+
+
+█ PASSO 3: EXECUTAR O PROGRAMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Navegue até o diretório do projeto:
+
+    cd /home/lucas_marruda/Documentos/pessoal/gitPessoal/PDV/desktop/pdv-compose
+
+Execute com o script pronto:
+
+    ./run.sh
+
+OU execute diretamente com Gradle:
+
+    ./gradlew run
+
+
+█ PRIMEIRA EXECUÇÃO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ IMPORTANTE: Na primeira vez vai demorar alguns minutos!
+
+O sistema vai:
+1. Baixar o Gradle (gerenciador de build)
+2. Baixar todas as dependências (bibliotecas)
+3. Compilar o código Kotlin
+4. Criar o banco de dados SQLite
+5. Inserir 10 produtos de exemplo
+6. Abrir a janela do programa
+
+Aguarde pacientemente! Nas próximas execuções será muito mais rápido.
+
+
+█ O QUE ESPERAR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Quando tudo estiver OK, você verá:
+
+✓ No terminal:
+  - "Downloading gradle-8.4..."
+  - "Starting Gradle Daemon..."
+  - "=== Iniciando PDV Desktop ==="
+  - "✓ Banco de dados inicializado com sucesso"
+  - "✓ Conexão com banco de dados estabelecida"
+  - "✓ Tabelas criadas com sucesso"
+  - "✓ 10 produtos de exemplo inseridos"
+
+✓ Uma janela abrirá com o sistema PDV!
+
+
+█ TESTAR O SISTEMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Na tela de "Vendas" (primeira tela)
+2. Digite o SKU: 001
+3. Clique em "Adicionar"
+4. O produto "Coca-Cola 2L" será adicionado ao carrinho
+5. Clique em "Finalizar Venda"
+6. Escolha uma forma de pagamento
+7. Confirme!
+
+Pronto! Sua primeira venda foi registrada! 🎉
+
+
+█ PRODUTOS DE EXEMPLO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+O sistema vem com 10 produtos pré-cadastrados:
+
+SKU 001 - Coca-Cola 2L          R$ 8,50
+SKU 002 - Pão Francês (kg)      R$ 12,00
+SKU 003 - Arroz Tipo 1 5kg      R$ 25,90
+SKU 004 - Feijão Preto 1kg      R$ 7,80
+SKU 005 - Café Torrado 500g     R$ 15,50
+SKU 006 - Açúcar Cristal 1kg    R$ 4,20
+SKU 007 - Leite Integral 1L     R$ 5,80
+SKU 008 - Manteiga 500g         R$ 18,90
+SKU 009 - Óleo de Soja 900ml    R$ 7,50
+SKU 010 - Macarrão 500g         R$ 4,50
+
+
+█ PROBLEMAS COMUNS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ "Permission denied: ./run.sh"
+   Solução:
+   chmod +x run.sh gradlew
+   ./run.sh
+
+❌ "Java não encontrado"
+   Solução: Instale o Java (veja PASSO 2)
+
+❌ "Could not resolve dependencies"
+   Solução: Verifique sua conexão com internet
+
+❌ Janela não abre (tela preta)
+   Solução:
+   sudo apt install libgl1-mesa-glx libxi6 libxrender1
+   ./run.sh
+
+❌ Erro "Address already in use"
+   Solução:
+   pkill -f pdv-compose
+   ./run.sh
+
+
+█ ARQUIVOS ÚTEIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 INDEX.md           - Índice de toda documentação
+📄 QUICKSTART.md      - Guia rápido de início
+📄 INSTALL.md         - Guia completo de instalação
+📄 TROUBLESHOOTING.md - Resolução de problemas detalhada
+📄 COMMANDS.md        - Referência de comandos
+📄 README.md          - Documentação técnica completa
+
+
+█ ATALHOS RÁPIDOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Executar:              ./run.sh
+Limpar cache:          ./gradlew clean
+Recompilar:            ./gradlew clean build
+Resetar banco:         rm pdv.db && ./run.sh
+Matar processo:        pkill -f pdv-compose
+
+
+█ ESTRUTURA DO SISTEMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+O sistema possui 4 telas principais:
+
+1. 🛒 VENDAS (PDV)
+   - Adicionar produtos ao carrinho
+   - Calcular totais automaticamente
+   - Finalizar vendas com várias formas de pagamento
+
+2. 📦 PRODUTOS
+   - Cadastrar novos produtos
+   - Editar e remover produtos
+   - Buscar por nome, SKU ou categoria
+   - Ver alertas de estoque baixo
+
+3. 📊 RELATÓRIOS
+   - Faturamento total e do dia
+   - Número de vendas
+   - Ticket médio
+   - Estatísticas de estoque
+
+4. ⚙️ CONFIGURAÇÕES
+   - Informações do sistema
+   - Configurações gerais
+
+
+█ DICAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 Use Tab para navegar entre campos rapidamente
+💡 O campo SKU aceita Enter para adicionar produtos
+💡 O banco de dados fica em: pdv.db
+💡 Para resetar os dados, delete o arquivo pdv.db
+💡 Todas as telas têm navegação pelo menu lateral
+
+
+█ SUPORTE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Se precisar de ajuda:
+
+1. Leia o arquivo TROUBLESHOOTING.md
+2. Verifique se o Java 17+ está instalado
+3. Tente limpar o cache: ./gradlew clean
+4. Consulte a documentação completa em README.md
+
+
+╔══════════════════════════════════════════════════════════════════╗
+║                                                                  ║
+║  Sistema desenvolvido com Kotlin + Compose for Desktop          ║
+║  Versão: 1.0.0 | Data: 2026-03-09                               ║
+║                                                                  ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Para começar agora: ./run.sh
+
+Boa sorte! 🚀
+

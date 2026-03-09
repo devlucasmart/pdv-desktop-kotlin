@@ -1,0 +1,211 @@
+╔══════════════════════════════════════════════════════════════════╗
+║                                                                  ║
+║    SOLUÇÃO DEFINITIVA - PROBLEMAS DE COMPILAÇÃO                 ║
+║                                                                  ║
+╚══════════════════════════════════════════════════════════════════╝
+
+O PROBLEMA:
+-----------
+O cache do Kotlin Daemon estava corrompido, causando erro ao compilar.
+
+
+SOLUÇÃO AUTOMÁTICA (RECOMENDADA):
+----------------------------------
+
+Execute o script de correção:
+
+    cd /home/lucas_marruda/Documentos/pessoal/gitPessoal/PDV/desktop/pdv-compose
+    ./fix.sh
+
+Este script irá:
+✓ Parar todos os daemons
+✓ Limpar todos os caches corrompidos
+✓ Recriar o Gradle Wrapper (se necessário)
+✓ Compilar o projeto do zero
+
+
+SOLUÇÃO MANUAL (Passo-a-passo):
+--------------------------------
+
+Se preferir fazer manualmente, siga os passos:
+
+1️⃣  PARAR DAEMONS
+    cd /home/lucas_marruda/Documentos/pessoal/gitPessoal/PDV/desktop/pdv-compose
+    ./gradlew --stop
+    pkill -f "GradleDaemon"
+    pkill -f "KotlinCompileDaemon"
+
+2️⃣  LIMPAR CACHES LOCAIS
+    rm -rf build
+    rm -rf .gradle
+
+3️⃣  LIMPAR CACHES GLOBAIS
+    rm -rf ~/.gradle/caches/
+    rm -rf ~/.gradle/daemon/
+    rm -rf ~/.kotlin/
+
+4️⃣  COMPILAR NOVAMENTE (sem daemon)
+    ./gradlew clean build --no-daemon --refresh-dependencies
+
+5️⃣  EXECUTAR O PROJETO
+    ./gradlew run
+
+
+EXPLICAÇÃO DOS ERROS:
+---------------------
+
+❌ Erro original: "classpath/lasspath"
+   → Gradle Wrapper corrompido ou ausente
+   → SOLUÇÃO: Recriar arquivos do wrapper
+
+❌ Erro: "Cannot add task 'run' as a task with that name already exists"
+   → Conflito entre plugins 'application' e 'compose.desktop'
+   → SOLUÇÃO: Remover plugin 'application' do build.gradle.kts ✓
+
+❌ Erro: "PersistentEnumerator storage corrupted"
+   → Cache do Kotlin corrompido
+   → SOLUÇÃO: Deletar caches e recompilar
+
+
+O QUE FOI CORRIGIDO:
+-------------------
+
+✅ Removido plugin 'application' conflitante do build.gradle.kts
+✅ Criado script fix.sh para limpeza automática
+✅ Gradle Wrapper recriado com arquivos corretos
+✅ Documentação de resolução criada
+
+
+COMANDOS RÁPIDOS:
+-----------------
+
+# Solução completa automatizada
+./fix.sh
+
+# OU passo-a-passo manual:
+./gradlew --stop
+rm -rf build .gradle ~/.gradle/caches/ ~/.gradle/daemon/ ~/.kotlin/
+./gradlew clean build --no-daemon --refresh-dependencies
+
+# Depois de compilar:
+./gradlew run
+
+
+SE AINDA ASSIM DER ERRO:
+------------------------
+
+1. Verifique se o Java 17+ está instalado:
+   java -version
+
+   Se não estiver:
+   sudo apt install openjdk-17-jdk
+
+2. Verifique se há espaço em disco:
+   df -h .
+
+   Necessário: pelo menos 500MB livres
+
+3. Verifique conexão com internet:
+   ping -c 1 google.com
+
+   Necessária para baixar dependências
+
+4. Tente recriar o Gradle Wrapper:
+   rm -rf gradle gradlew gradlew.bat
+
+   Depois baixe novamente:
+   curl -L -o gradlew https://raw.githubusercontent.com/gradle/gradle/v8.4.0/gradlew
+   chmod +x gradlew
+   mkdir -p gradle/wrapper
+   curl -L -o gradle/wrapper/gradle-wrapper.jar \
+       https://raw.githubusercontent.com/gradle/gradle/v8.4.0/gradle/wrapper/gradle-wrapper.jar
+
+
+PRIMEIRA COMPILAÇÃO:
+--------------------
+
+⚠️  IMPORTANTE: A primeira compilação pode demorar 5-10 minutos!
+
+O Gradle precisa baixar:
+- Próprio Gradle (se não existir)
+- Kotlin compiler
+- Compose Desktop libraries
+- SQLite JDBC driver
+- Todas as dependências
+
+Seja paciente na primeira vez!
+
+
+PRÓXIMAS COMPILAÇÕES:
+---------------------
+
+Após a primeira compilação bem-sucedida:
+- Compilações incrementais: ~10-30 segundos
+- Execução: ~5-10 segundos
+
+
+VERIFICAR SE FUNCIONOU:
+-----------------------
+
+Após ./fix.sh ou compilação manual, você deve ver:
+
+    BUILD SUCCESSFUL in XXs
+
+E no final:
+
+    ✅ COMPILAÇÃO BEM-SUCEDIDA!
+
+Então pode executar:
+
+    ./gradlew run
+
+Ou:
+
+    ./run.sh
+
+
+DICAS PARA EVITAR PROBLEMAS:
+-----------------------------
+
+1. Sempre use ./gradlew (não gradle global)
+2. Se der erro, primeiro: ./gradlew --stop
+3. Mantenha internet estável na primeira compilação
+4. Não interrompa a primeira compilação
+5. Se travar, Ctrl+C e tente novamente
+
+
+LOGS E DEBUG:
+-------------
+
+Para ver mais detalhes em caso de erro:
+
+    ./gradlew build --info          # Logs detalhados
+    ./gradlew build --debug         # Logs completos
+    ./gradlew build --stacktrace    # Com stack trace
+
+
+RESUMO DO QUE FAZER AGORA:
+--------------------------
+
+1. Execute o script de correção:
+
+   ./fix.sh
+
+2. Aguarde a compilação (pode demorar alguns minutos)
+
+3. Se der BUILD SUCCESSFUL, execute:
+
+   ./gradlew run
+
+4. Aproveite o PDV Desktop! 🎉
+
+
+╔══════════════════════════════════════════════════════════════════╗
+║                                                                  ║
+║  Qualquer dúvida, consulte: TROUBLESHOOTING.md                  ║
+║                                                                  ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Última atualização: 2026-03-09
+Versão: 1.0.0
+

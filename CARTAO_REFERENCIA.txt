@@ -1,0 +1,168 @@
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                                                             ┃
+┃         PDV DESKTOP - CARTÃO DE REFERÊNCIA RÁPIDA          ┃
+┃                                                             ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+█ EXECUTAR O SISTEMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ./run.sh                    # Método recomendado
+  ./gradlew run               # Método alternativo
+
+
+█ PRIMEIRA VEZ - INSTALAR JAVA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  java -version               # Verificar se está instalado
+
+  # Ubuntu/Debian
+  sudo apt install openjdk-17-jdk
+
+
+█ RESOLVER PROBLEMAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  chmod +x gradlew run.sh     # Dar permissões
+  ./check.sh                  # Verificar ambiente
+  ./gradlew clean             # Limpar cache
+  rm pdv.db                   # Resetar banco
+  pkill -f pdv-compose        # Matar processo
+
+
+█ PRODUTOS DE EXEMPLO (SKUs PARA TESTAR)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  001  →  Coca-Cola 2L          R$ 8,50
+  002  →  Pão Francês (kg)      R$ 12,00
+  003  →  Arroz Tipo 1 5kg      R$ 25,90
+  004  →  Feijão Preto 1kg      R$ 7,80
+  005  →  Café Torrado 500g     R$ 15,50
+
+
+█ NAVEGAÇÃO NO SISTEMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Menu Lateral:
+
+  🛒  VENDAS       →  Fazer vendas (PDV principal)
+  📦  PRODUTOS     →  Gerenciar estoque
+  📊  RELATÓRIOS   →  Ver estatísticas
+  ⚙️   CONFIG       →  Configurações
+
+
+█ ATALHOS NO SISTEMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Tab              # Navegar entre campos
+  Enter            # Adicionar produto (no campo SKU)
+  Esc              # Fechar diálogos
+
+
+█ ARQUIVOS IMPORTANTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  QUICKSTART.md           # Começar em 2 minutos
+  TROUBLESHOOTING.md      # Resolver problemas
+  COMO_EXECUTAR.txt       # Guia visual
+  pdv.db                  # Banco de dados
+
+
+█ COMANDOS ÚTEIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  # Limpar e recompilar
+  ./gradlew clean build
+
+  # Executar com logs
+  ./gradlew run --stacktrace
+
+  # Gerar executável .deb
+  ./gradlew packageDeb
+
+  # Ver banco de dados
+  sqlite3 pdv.db "SELECT * FROM product;"
+
+
+█ ESTRUTURA DE PASTAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  pdv-compose/
+  ├── run.sh              ← Execute este!
+  ├── QUICKSTART.md       ← Leia este!
+  ├── src/                ← Código fonte
+  └── pdv.db              ← Banco (criado automaticamente)
+
+
+█ PROBLEMAS MAIS COMUNS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ❌ "Java não encontrado"
+     → sudo apt install openjdk-17-jdk
+
+  ❌ "Permission denied"
+     → chmod +x gradlew run.sh
+
+  ❌ Janela não abre
+     → sudo apt install libgl1-mesa-glx
+
+  ❌ Já está rodando
+     → pkill -f pdv-compose
+
+
+█ DOCUMENTAÇÃO COMPLETA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  INDEX.md              # Índice de tudo
+  INSTALL.md            # Instalação detalhada
+  COMMANDS.md           # Todos os comandos
+  README.md             # Doc técnica completa
+  RESUMO_FINAL.md       # Este documento
+
+
+█ TESTE RÁPIDO (30 SEGUNDOS)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. Execute: ./run.sh
+  2. Digite SKU: 001
+  3. Clique "Adicionar"
+  4. Clique "Finalizar Venda"
+  5. Escolha pagamento
+  6. Confirme!
+
+  ✅ Primeira venda registrada!
+
+
+█ INFORMAÇÕES DO SISTEMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Versão:           1.0.0
+  Framework:        Compose for Desktop
+  Linguagem:        Kotlin 1.9.22
+  Banco de dados:   SQLite
+  Requisitos:       Java 17+
+
+
+█ ATALHOS BASH (OPCIONAL)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Adicione no ~/.bashrc ou ~/.zshrc:
+
+  alias pdv='cd ~/...caminho.../pdv-compose && ./run.sh'
+  alias pdv-clean='cd ~/...caminho.../pdv-compose && ./gradlew clean'
+
+  Depois, execute apenas: pdv
+
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                                                             ┃
+┃  PRONTO PARA COMEÇAR? Digite: ./run.sh                     ┃
+┃                                                             ┃
+┃  Precisa de ajuda? Leia: QUICKSTART.md                     ┃
+┃                                                             ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+💡 DICA: Imprima ou salve este cartão para consulta rápida!
+
+Versão 1.0.0 | 2026-03-09 | Desenvolvido com ❤️ em Kotlin
+
