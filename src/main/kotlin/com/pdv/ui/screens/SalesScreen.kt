@@ -1,9 +1,13 @@
 package com.pdv.ui.screens
 
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
@@ -17,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pdv.data.*
@@ -141,393 +146,410 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
         lastAddedProduct = null
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // Cabeçalho com título e status
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    "Ponto de Venda",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                if (itemCount > 0) {
-                    Text(
-                        "$itemCount item(s) no carrinho",
-                        fontSize = 14.sp,
-                        color = Color.Gray
-                    )
-                }
-            }
+    val outerScroll = rememberScrollState()
 
-            // Indicador de vendas do dia
-            val salesToday = remember { saleDao.getSalesCountToday() }
-            val totalToday = remember { saleDao.getSalesToday() }
-            Card(
-                elevation = 2.dp,
-                backgroundColor = Color(0xFFE3F2FD)
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("Vendas Hoje", fontSize = 12.sp, color = Color.Gray)
-                    Text(
-                        "$salesToday vendas • R$ %.2f".format(totalToday),
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1976D2)
-                    )
-                }
-            }
-        }
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+        val maxContentWidth: Dp = if (this.maxWidth < 1000.dp) this.maxWidth - 32.dp else 980.dp
 
-        // Status do Caixa
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-            elevation = 2.dp,
-            backgroundColor = if (currentSession != null) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
-        ) {
+        Column(modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(outerScroll)
+            .padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            // Cabeçalho com título e status
             Row(
-                modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (currentSession != null) Icons.Default.LockOpen else Icons.Default.Lock,
-                        contentDescription = null,
-                        tint = if (currentSession != null) Color(0xFF4CAF50) else Color(0xFFD32F2F),
-                        modifier = Modifier.size(24.dp)
+                Column {
+                    Text(
+                        "Ponto de Venda",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Column {
+                    if (itemCount > 0) {
                         Text(
-                            if (currentSession != null) "Caixa Aberto" else "Caixa Fechado",
-                            fontWeight = FontWeight.Bold,
-                            color = if (currentSession != null) Color(0xFF4CAF50) else Color(0xFFD32F2F)
-                        )
-                        Text(
-                            if (currentSession != null)
-                                "Operador: ${currentSession?.openedBy ?: "-"}"
-                            else
-                                "Vá para a aba 'Caixa' para abrir",
-                            fontSize = 12.sp,
+                            "$itemCount item(s) no carrinho",
+                            fontSize = 14.sp,
                             color = Color.Gray
                         )
                     }
                 }
 
-                if (currentSession != null) {
-                    // Mostrar saldo atual do caixa
-                    val movements = remember(currentSession) {
-                        currentSession?.let { cashDao.getMovementsForSession(it.id) } ?: emptyList()
-                    }
-                    val totalMovements = movements.sumOf { (it["amount"] as? Double) ?: 0.0 }
-                    val saldoCaixa = (currentSession?.initialAmount ?: 0.0) + totalMovements
-
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text("Saldo em caixa", fontSize = 12.sp, color = Color.Gray)
+                // Indicador de vendas do dia
+                val salesToday = remember { saleDao.getSalesCountToday() }
+                val totalToday = remember { saleDao.getSalesToday() }
+                Card(
+                    elevation = 2.dp,
+                    backgroundColor = Color(0xFFE3F2FD)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("Vendas Hoje", fontSize = 12.sp, color = Color.Gray)
                         Text(
-                            "R$ %.2f".format(saldoCaixa),
+                            "$salesToday vendas • R$ %.2f".format(totalToday),
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF4CAF50)
+                            color = Color(0xFF1976D2)
                         )
                     }
                 }
             }
-        }
 
-        // Aviso de permissão
-        if (!canMakeSales) {
+            // Status do Caixa
             Card(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                backgroundColor = Color(0xFFFFEBEE),
-                elevation = 2.dp
+                modifier = Modifier.fillMaxWidth().widthIn(max = maxContentWidth).padding(bottom = 12.dp),
+                elevation = 2.dp,
+                backgroundColor = if (currentSession != null) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Block, null, tint = Color(0xFFD32F2F), modifier = Modifier.size(32.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text("Acesso Negado", fontWeight = FontWeight.Bold, color = Color(0xFFD32F2F))
-                        Text("Você não tem permissão para realizar vendas.", fontSize = 14.sp, color = Color.Gray)
-                    }
-                }
-            }
-        }
-
-        // Campo de busca/scanner
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            elevation = 2.dp
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = skuInput,
-                        onValueChange = { skuInput = it.uppercase().trim() },
-                        label = { Text("SKU ou Código de Barras") },
-                        placeholder = { Text("Digite o código e pressione Enter...") },
-                        modifier = Modifier
-                            .weight(1f)
-                            .focusRequester(focusRequester)
-                            .onKeyEvent { keyEvent ->
-                                if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Enter) {
-                                    addProduct()
-                                    true
-                                } else {
-                                    false
-                                }
-                            },
-                        singleLine = true,
-                        enabled = canMakeSales && currentSession != null && !isProcessing,
-                        leadingIcon = {
-                            Icon(Icons.Default.QrCodeScanner, "Scanner", tint = MaterialTheme.colors.primary)
-                        },
-                        trailingIcon = {
-                            if (skuInput.isNotBlank()) {
-                                IconButton(onClick = { skuInput = "" }) {
-                                    Icon(Icons.Default.Clear, "Limpar", tint = Color.Gray)
-                                }
-                            }
-                        },
-                        colors = TextFieldDefaults.outlinedTextFieldColors(
-                            focusedBorderColor = MaterialTheme.colors.primary,
-                            unfocusedBorderColor = Color.Gray.copy(alpha = 0.5f)
-                        )
-                    )
-
-                    Spacer(Modifier.width(8.dp))
-
-                    Button(
-                        onClick = { addProduct() },
-                        enabled = skuInput.isNotBlank() && canMakeSales && currentSession != null && !isProcessing,
-                        modifier = Modifier.height(56.dp),
-                        colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary)
-                    ) {
-                        if (isProcessing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(Icons.Default.Add, "Adicionar")
-                            Spacer(Modifier.width(4.dp))
-                            Text("Adicionar")
-                        }
-                    }
-                }
-
-                // Último produto adicionado
-                lastAddedProduct?.let { productName ->
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Último: $productName", fontSize = 12.sp, color = Color(0xFF4CAF50))
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        // Lista de itens
-        Card(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            elevation = 2.dp
-        ) {
-            if (items.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.ShoppingCart,
-                            contentDescription = null,
-                            modifier = Modifier.size(80.dp),
-                            tint = Color.Gray.copy(alpha = 0.5f)
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Text("Carrinho vazio", color = Color.Gray, fontSize = 20.sp, fontWeight = FontWeight.Medium)
-                        Text("Escaneie ou digite o SKU do produto para começar", color = Color.Gray, fontSize = 14.sp)
-
-                        if (currentSession == null) {
-                            Spacer(Modifier.height(16.dp))
-                            Text(
-                                "⚠ Abra o caixa primeiro",
-                                color = Color(0xFFFF9800),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            } else {
-                Column {
-                    // Header da lista
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colors.primary.copy(alpha = 0.1f))
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Produto", fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f))
-                        Text("Qtd", fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp), textAlign = TextAlign.Center)
-                        Text("Total", fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp), textAlign = TextAlign.End)
-                        Spacer(Modifier.width(48.dp))
-                    }
-
-                    LazyColumn(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                        items(items, key = { "${it.product.id}-${it.quantity}" }) { item ->
-                            SaleItemCard(
-                                item = item,
-                                onQuantityChange = { newQty ->
-                                    val index = items.indexOfFirst { it.product.id == item.product.id }
-                                    if (index >= 0) {
-                                        val validQty = newQty.coerceIn(1, item.product.stockQuantity)
-                                        items[index] = SaleItem(item.product, validQty, item.discount)
-                                    }
-                                },
-                                onRemove = {
-                                    items.removeAll { it.product.id == item.product.id }
-                                    if (items.isEmpty()) {
-                                        discount = 0.0
-                                        lastAddedProduct = null
-                                    }
-                                }
-                            )
-                            Divider(color = Color.Gray.copy(alpha = 0.2f))
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        // Painel de totais e ações
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            backgroundColor = MaterialTheme.colors.primary,
-            elevation = 4.dp,
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                // Subtotal
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("Subtotal ($itemCount itens):", fontSize = 16.sp, color = Color.White.copy(alpha = 0.9f))
-                    Text("R$ %.2f".format(subtotal), fontSize = 16.sp, color = Color.White)
-                }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (currentSession != null) Icons.Default.LockOpen else Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = if (currentSession != null) Color(0xFF4CAF50) else Color(0xFFD32F2F),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                if (currentSession != null) "Caixa Aberto" else "Caixa Fechado",
+                                fontWeight = FontWeight.Bold,
+                                color = if (currentSession != null) Color(0xFF4CAF50) else Color(0xFFD32F2F)
+                            )
+                            Text(
+                                if (currentSession != null)
+                                    "Operador: ${currentSession?.openedBy ?: "-"}"
+                                else
+                                    "Vá para a aba 'Caixa' para abrir",
+                                fontSize = 12.sp,
+                                color = Color.Gray
+                            )
+                        }
+                    }
 
-                // Desconto (se houver)
-                if (discount > 0) {
+                    if (currentSession != null) {
+                        // Mostrar saldo atual do caixa
+                        val movements = remember(currentSession) {
+                            currentSession?.let { cashDao.getMovementsForSession(it.id) } ?: emptyList()
+                        }
+                        val totalMovements = movements.sumOf { (it["amount"] as? Double) ?: 0.0 }
+                        val saldoCaixa = (currentSession?.initialAmount ?: 0.0) + totalMovements
+
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("Saldo em caixa", fontSize = 12.sp, color = Color.Gray)
+                            Text(
+                                "R$ %.2f".format(saldoCaixa),
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4CAF50)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Aviso de permissão
+            if (!canMakeSales) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    backgroundColor = Color(0xFFFFEBEE),
+                    elevation = 2.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Block, null, tint = Color(0xFFD32F2F), modifier = Modifier.size(32.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text("Acesso Negado", fontWeight = FontWeight.Bold, color = Color(0xFFD32F2F))
+                            Text("Você não tem permissão para realizar vendas.", fontSize = 14.sp, color = Color.Gray)
+                        }
+                    }
+                }
+            }
+
+            // Campo de busca/scanner
+            Card(
+                modifier = Modifier.fillMaxWidth().widthIn(max = maxContentWidth),
+                elevation = 2.dp
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = skuInput,
+                            onValueChange = { skuInput = it.uppercase().trim() },
+                            label = { Text("SKU ou Código de Barras") },
+                            placeholder = { Text("Digite o código e pressione Enter...") },
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(focusRequester)
+                                .onKeyEvent { keyEvent ->
+                                    if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Enter) {
+                                        addProduct()
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                },
+                            singleLine = true,
+                            enabled = canMakeSales && currentSession != null && !isProcessing,
+                            leadingIcon = {
+                                Icon(Icons.Default.QrCodeScanner, "Scanner", tint = MaterialTheme.colors.primary)
+                            },
+                            trailingIcon = {
+                                if (skuInput.isNotBlank()) {
+                                    IconButton(onClick = { skuInput = "" }) {
+                                        Icon(Icons.Default.Clear, "Limpar", tint = Color.Gray)
+                                    }
+                                }
+                            },
+                            colors = TextFieldDefaults.outlinedTextFieldColors(
+                                focusedBorderColor = MaterialTheme.colors.primary,
+                                unfocusedBorderColor = Color.Gray.copy(alpha = 0.5f)
+                            )
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Button(
+                            onClick = { addProduct() },
+                            enabled = skuInput.isNotBlank() && canMakeSales && currentSession != null && !isProcessing,
+                            modifier = Modifier.height(56.dp),
+                            colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary)
+                        ) {
+                            if (isProcessing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                            )
+                            } else {
+                                Icon(Icons.Default.Add, "Adicionar")
+                                Spacer(Modifier.width(4.dp))
+                                Text("Adicionar")
+                            }
+                        }
+                    }
+
+                    // Último produto adicionado
+                    lastAddedProduct?.let { productName ->
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Último: $productName", fontSize = 12.sp, color = Color(0xFF4CAF50))
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // Lista de itens
+            Card(
+                modifier = Modifier.weight(1f).fillMaxWidth().widthIn(max = maxContentWidth),
+                elevation = 2.dp
+            ) {
+                if (items.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.ShoppingCart,
+                                contentDescription = null,
+                                modifier = Modifier.size(80.dp),
+                                tint = Color.Gray.copy(alpha = 0.5f)
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Text("Carrinho vazio", color = Color.Gray, fontSize = 20.sp, fontWeight = FontWeight.Medium)
+                            Text("Escaneie ou digite o SKU do produto para começar", color = Color.Gray, fontSize = 14.sp)
+
+                            if (currentSession == null) {
+                                Spacer(Modifier.height(16.dp))
+                                Text(
+                                    "⚠ Abra o caixa primeiro",
+                                    color = Color(0xFFFF9800),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Column {
+                        // Header da lista
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colors.primary.copy(alpha = 0.1f))
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Produto", fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f))
+                            Text("Qtd", fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp), textAlign = TextAlign.Center)
+                            Text("Total", fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp), textAlign = TextAlign.End)
+                            Spacer(Modifier.width(48.dp))
+                        }
+
+                        LazyColumn(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                            items(items, key = { "${it.product.id}-${it.quantity}" }) { item ->
+                                SaleItemCard(
+                                    item = item,
+                                    onQuantityChange = { newQty ->
+                                        val index = items.indexOfFirst { it.product.id == item.product.id }
+                                        if (index >= 0) {
+                                            val validQty = newQty.coerceIn(1, item.product.stockQuantity)
+                                            items[index] = SaleItem(item.product, validQty, item.discount)
+                                        }
+                                    },
+                                    onRemove = {
+                                        items.removeAll { it.product.id == item.product.id }
+                                        if (items.isEmpty()) {
+                                            discount = 0.0
+                                            lastAddedProduct = null
+                                        }
+                                    }
+                                )
+                                Divider(color = Color.Gray.copy(alpha = 0.2f))
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // Painel de totais e ações
+            Card(
+                modifier = Modifier.fillMaxWidth().widthIn(max = maxContentWidth),
+                backgroundColor = MaterialTheme.colors.primary,
+                elevation = 4.dp,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    // Subtotal
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Desconto:", fontSize = 16.sp, color = Color(0xFFFFCDD2))
-                            IconButton(
-                                onClick = { discount = 0.0 },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(Icons.Default.Close, "Remover desconto", tint = Color(0xFFFFCDD2), modifier = Modifier.size(16.dp))
+                        Text("Subtotal ($itemCount itens):", fontSize = 16.sp, color = Color.White.copy(alpha = 0.9f))
+                        Text("R$ %.2f".format(subtotal), fontSize = 16.sp, color = Color.White)
+                    }
+
+                    // Desconto (se houver)
+                    if (discount > 0) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Desconto:", fontSize = 16.sp, color = Color(0xFFFFCDD2))
+                                IconButton(
+                                    onClick = { discount = 0.0 },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, "Remover desconto", tint = Color(0xFFFFCDD2), modifier = Modifier.size(16.dp))
+                                }
                             }
+                            Text("-R$ %.2f".format(discount), fontSize = 16.sp, color = Color(0xFFFFCDD2))
                         }
-                        Text("-R$ %.2f".format(discount), fontSize = 16.sp, color = Color(0xFFFFCDD2))
                     }
-                }
 
-                Divider(
-                    modifier = Modifier.padding(vertical = 12.dp),
-                    color = Color.White.copy(alpha = 0.3f),
-                    thickness = 2.dp
-                )
-
-                // Total
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("TOTAL:", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Text(
-                        "R$ %.2f".format(total),
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF69F0AE)
+                    Divider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = Color.White.copy(alpha = 0.3f),
+                        thickness = 2.dp
                     )
-                }
 
-                Spacer(Modifier.height(16.dp))
-
-                // Botões de ação
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Botão Limpar
-                    OutlinedButton(
-                        onClick = { clearCart() },
-                        modifier = Modifier.weight(1f).height(50.dp),
-                        enabled = items.isNotEmpty(),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                    // Total
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.DeleteSweep, "Limpar")
-                        Spacer(Modifier.width(4.dp))
-                        Text("Limpar")
+                        Text("TOTAL:", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(
+                            "R$ %.2f".format(total),
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF69F0AE)
+                        )
                     }
 
-                    // Botão Desconto
-                    OutlinedButton(
-                        onClick = { showDiscountDialog = true },
-                        modifier = Modifier.weight(1f).height(50.dp),
-                        enabled = items.isNotEmpty() && canMakeSales,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-                    ) {
-                        Icon(Icons.Default.Discount, "Desconto")
-                        Spacer(Modifier.width(4.dp))
-                        Text("Desconto")
-                    }
+                    Spacer(Modifier.height(16.dp))
 
-                    // Botão Finalizar
-                    Button(
-                        onClick = {
-                            if (!canMakeSales) {
-                                scope.launch { snackbarHostState.showSnackbar("✗ Sem permissão para vendas") }
-                                return@Button
-                            }
-                            if (currentSession == null) {
-                                scope.launch { snackbarHostState.showSnackbar("✗ Abra o caixa primeiro") }
-                                return@Button
-                            }
-                            if (items.isEmpty()) {
-                                scope.launch { snackbarHostState.showSnackbar("✗ Carrinho vazio") }
-                                return@Button
-                            }
-                            showPaymentDialog = true
-                        },
-                        modifier = Modifier.weight(2f).height(50.dp),
-                        enabled = items.isNotEmpty() && canMakeSales && currentSession != null,
-                        colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF00C853))
-                    ) {
-                        Icon(Icons.Default.Payment, "Finalizar")
-                        Spacer(Modifier.width(8.dp))
-                        Text("PAGAR", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    // Botões de ação
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Botão Limpar
+                        OutlinedButton(
+                            onClick = { clearCart() },
+                            modifier = Modifier.weight(1f).height(50.dp),
+                            enabled = items.isNotEmpty(),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                        ) {
+                            Icon(Icons.Default.DeleteSweep, "Limpar")
+                            Spacer(Modifier.width(4.dp))
+                            Text("Limpar")
+                        }
+
+                        // Botão Desconto
+                        OutlinedButton(
+                            onClick = { showDiscountDialog = true },
+                            modifier = Modifier.weight(1f).height(50.dp),
+                            enabled = items.isNotEmpty() && canMakeSales,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                        ) {
+                            Icon(Icons.Default.Discount, "Desconto")
+                            Spacer(Modifier.width(4.dp))
+                            Text("Desconto")
+                        }
+
+                        // Botão Finalizar
+                        Button(
+                            onClick = {
+                                if (!canMakeSales) {
+                                    scope.launch { snackbarHostState.showSnackbar("✗ Sem permissão para vendas") }
+                                    return@Button
+                                }
+                                if (currentSession == null) {
+                                    scope.launch { snackbarHostState.showSnackbar("✗ Abra o caixa primeiro") }
+                                    return@Button
+                                }
+                                if (items.isEmpty()) {
+                                    scope.launch { snackbarHostState.showSnackbar("✗ Carrinho vazio") }
+                                    return@Button
+                                }
+                                showPaymentDialog = true
+                            },
+                            modifier = Modifier.weight(2f).height(50.dp),
+                            enabled = items.isNotEmpty() && canMakeSales && currentSession != null,
+                            colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF00C853))
+                        ) {
+                            Icon(Icons.Default.Payment, "Finalizar")
+                            Spacer(Modifier.width(8.dp))
+                            Text("PAGAR", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
+        }
+
+        // Optional scrollbar when content overflows vertically
+        if (outerScroll.maxValue > 0) {
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(outerScroll),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(8.dp)
+            )
         }
     }
 

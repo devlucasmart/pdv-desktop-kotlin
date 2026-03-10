@@ -174,6 +174,21 @@ object Database {
             )
         """)
 
+        // Tabela outbox para sincronização com servidor remoto (vendas pendentes)
+        conn.createStatement().executeUpdate("""
+            CREATE TABLE IF NOT EXISTS outbox_sale (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_uuid TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'PENDING',
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+
+        conn.createStatement().executeUpdate("""
+            CREATE INDEX IF NOT EXISTS idx_outbox_status ON outbox_sale(status)
+        """)
+
         println("✓ Tabelas criadas com sucesso")
     }
 

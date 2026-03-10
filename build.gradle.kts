@@ -35,6 +35,9 @@ dependencies {
     implementation("org.apache.pdfbox:pdfbox:2.0.30")
     implementation("org.apache.pdfbox:fontbox:2.0.30")
 
+    // JSON (org.json)
+    implementation("org.json:json:20230227")
+
     // Testing
     testImplementation(kotlin("test"))
 }
@@ -98,4 +101,3 @@ compose.desktop {
 kotlin {
     jvmToolchain(17)
 }
-

@@ -4,6 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
@@ -14,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pdv.data.*
@@ -46,11 +51,7 @@ fun CashRegisterScreen(snackbarHostState: SnackbarHostState) {
     }
 
     // Carregar dados inicial e periodicamente
-    LaunchedEffect(refreshTrigger) {
-        refreshData()
-    }
-
-    // Auto-refresh a cada 5 segundos
+    LaunchedEffect(refreshTrigger) { refreshData() }
     LaunchedEffect(Unit) {
         while (true) {
             delay(5000)
@@ -67,277 +68,287 @@ fun CashRegisterScreen(snackbarHostState: SnackbarHostState) {
         .sumOf { (it["amount"] as? Double) ?: 0.0 }
     val saldoAtual = (currentSession?.initialAmount ?: 0.0) + totalVendas + totalReforcos - totalSangrias
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // Cabeçalho
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "Controle de Caixa",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold
-            )
+    val outerScroll = rememberScrollState()
 
-            // Botão de atualizar
-            IconButton(onClick = { refreshTrigger++ }) {
-                Icon(Icons.Default.Refresh, "Atualizar", tint = MaterialTheme.colors.primary)
-            }
-        }
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val maxWidthContent: Dp = if (this.maxWidth < 1000.dp) this.maxWidth - 32.dp else 980.dp
 
-        // Status do Caixa
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            elevation = 4.dp,
-            backgroundColor = if (currentSession != null) Color(0xFFE8F5E9) else Color(0xFFFFEBEE),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            if (currentSession != null) Icons.Default.LockOpen else Icons.Default.Lock,
-                            contentDescription = null,
-                            tint = if (currentSession != null) Color(0xFF4CAF50) else Color(0xFFD32F2F),
-                            modifier = Modifier.size(40.dp)
-                        )
-                        Spacer(Modifier.width(16.dp))
-                        Column {
-                            Text(
-                                if (currentSession != null) "CAIXA ABERTO" else "CAIXA FECHADO",
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (currentSession != null) Color(0xFF4CAF50) else Color(0xFFD32F2F)
-                            )
-                            currentSession?.let { session ->
-                                Text(
-                                    "Aberto por: ${session.openedBy ?: "Desconhecido"}",
-                                    fontSize = 14.sp,
-                                    color = Color.Gray
-                                )
-                                Text(
-                                    "Abertura: ${formatDateTime(session.openedAt)}",
-                                    fontSize = 12.sp,
-                                    color = Color.Gray
-                                )
-                            }
-                        }
-                    }
-
-                    if (currentSession == null) {
-                        Button(
-                            onClick = { showOpenCashDialog = true },
-                            colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF4CAF50)),
-                            modifier = Modifier.height(48.dp)
-                        ) {
-                            Icon(Icons.Default.LockOpen, null, tint = Color.White)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Abrir Caixa", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    } else {
-                        OutlinedButton(
-                            onClick = { showCloseCashDialog = true },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFD32F2F)),
-                            modifier = Modifier.height(48.dp)
-                        ) {
-                            Icon(Icons.Default.Lock, null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Fechar Caixa", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Resumo Financeiro (apenas se caixa aberto)
-        if (currentSession != null) {
-            // Cards de resumo
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Valor Inicial
-                SummaryCard(
-                    title = "Valor Inicial",
-                    value = currentSession?.initialAmount ?: 0.0,
-                    icon = Icons.Default.AccountBalanceWallet,
-                    color = Color(0xFF2196F3),
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Vendas
-                SummaryCard(
-                    title = "Vendas",
-                    value = totalVendas,
-                    icon = Icons.Default.TrendingUp,
-                    color = Color(0xFF4CAF50),
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Reforços
-                SummaryCard(
-                    title = "Reforços",
-                    value = totalReforcos,
-                    icon = Icons.Default.Add,
-                    color = Color(0xFF9C27B0),
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Sangrias
-                SummaryCard(
-                    title = "Sangrias",
-                    value = totalSangrias,
-                    icon = Icons.Default.Remove,
-                    color = Color(0xFFFF5722),
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Saldo Atual
-                Card(
-                    modifier = Modifier.weight(1f),
-                    elevation = 4.dp,
-                    backgroundColor = Color(0xFF1976D2),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(Icons.Default.AttachMoney, null, tint = Color.White, modifier = Modifier.size(28.dp))
-                        Spacer(Modifier.height(4.dp))
-                        Text("Saldo Atual", fontSize = 12.sp, color = Color.White.copy(alpha = 0.8f))
-                        Text(
-                            "R$ %.2f".format(saldoAtual),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // Botões de ação: Sangria e Reforço
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = { showDepositDialog = true },
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF9C27B0))
-                ) {
-                    Icon(Icons.Default.AddCircle, null, tint = Color.White)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Reforço de Caixa", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-
-                Button(
-                    onClick = { showWithdrawalDialog = true },
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFFFF5722))
-                ) {
-                    Icon(Icons.Default.RemoveCircle, null, tint = Color.White)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Sangria", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // Lista de Movimentações
-            Card(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                elevation = 2.dp,
-                shape = RoundedCornerShape(8.dp)
+        Column(modifier = Modifier.fillMaxSize().verticalScroll(outerScroll).padding(16.dp)) {
+            // Cabeçalho
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    // Header
+                Text(
+                    "Controle de Caixa",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                // Botão de atualizar
+                IconButton(onClick = { refreshTrigger++ }) {
+                    Icon(Icons.Default.Refresh, "Atualizar", tint = MaterialTheme.colors.primary)
+                }
+            }
+
+            // Status do Caixa
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = 4.dp,
+                backgroundColor = if (currentSession != null) Color(0xFFE8F5E9) else Color(0xFFFFEBEE),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colors.primary.copy(alpha = 0.1f))
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            "Movimentações do Caixa",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "${movements.size} registro(s)",
-                            fontSize = 14.sp,
-                            color = Color.Gray
-                        )
-                    }
-
-                    Divider()
-
-                    if (movements.isEmpty()) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Default.Receipt,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(64.dp),
-                                    tint = Color.Gray.copy(alpha = 0.5f)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                if (currentSession != null) Icons.Default.LockOpen else Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = if (currentSession != null) Color(0xFF4CAF50) else Color(0xFFD32F2F),
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Spacer(Modifier.width(16.dp))
+                            Column {
+                                Text(
+                                    if (currentSession != null) "CAIXA ABERTO" else "CAIXA FECHADO",
+                                    fontSize = 22.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (currentSession != null) Color(0xFF4CAF50) else Color(0xFFD32F2F)
                                 )
-                                Spacer(Modifier.height(12.dp))
-                                Text("Nenhuma movimentação ainda", color = Color.Gray, fontSize = 16.sp)
-                                Text("As vendas e operações aparecerão aqui", fontSize = 14.sp, color = Color.Gray)
+                                currentSession?.let { session ->
+                                    Text(
+                                        "Aberto por: ${session.openedBy ?: "Desconhecido"}",
+                                        fontSize = 14.sp,
+                                        color = Color.Gray
+                                    )
+                                    Text(
+                                        "Abertura: ${formatDateTime(session.openedAt)}",
+                                        fontSize = 12.sp,
+                                        color = Color.Gray
+                                    )
+                                }
                             }
                         }
-                    } else {
-                        LazyColumn(modifier = Modifier.padding(8.dp)) {
-                            items(movements.reversed()) { movement ->
-                                MovementItem(movement)
-                                Divider(color = Color.Gray.copy(alpha = 0.2f))
+
+                        if (currentSession == null) {
+                            Button(
+                                onClick = { showOpenCashDialog = true },
+                                colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF4CAF50)),
+                                modifier = Modifier.height(48.dp)
+                            ) {
+                                Icon(Icons.Default.LockOpen, null, tint = Color.White)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Abrir Caixa", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = { showCloseCashDialog = true },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFD32F2F)),
+                                modifier = Modifier.height(48.dp)
+                            ) {
+                                Icon(Icons.Default.Lock, null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Fechar Caixa", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                 }
             }
-        } else {
-            // Caixa fechado - mostrar mensagem
-            Card(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                elevation = 2.dp,
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+
+            Spacer(Modifier.height(16.dp))
+
+            // Resumo Financeiro (apenas se caixa aberto)
+            if (currentSession != null) {
+                // Cards de resumo
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Valor Inicial
+                    SummaryCard(
+                        title = "Valor Inicial",
+                        value = currentSession?.initialAmount ?: 0.0,
+                        icon = Icons.Default.AccountBalanceWallet,
+                        color = Color(0xFF2196F3),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    // Vendas
+                    SummaryCard(
+                        title = "Vendas",
+                        value = totalVendas,
+                        icon = Icons.Default.TrendingUp,
+                        color = Color(0xFF4CAF50),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    // Reforços
+                    SummaryCard(
+                        title = "Reforços",
+                        value = totalReforcos,
+                        icon = Icons.Default.Add,
+                        color = Color(0xFF9C27B0),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    // Sangrias
+                    SummaryCard(
+                        title = "Sangrias",
+                        value = totalSangrias,
+                        icon = Icons.Default.Remove,
+                        color = Color(0xFFFF5722),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    // Saldo Atual
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        elevation = 4.dp,
+                        backgroundColor = Color(0xFF1976D2),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(Icons.Default.AttachMoney, null, tint = Color.White, modifier = Modifier.size(28.dp))
+                            Spacer(Modifier.height(4.dp))
+                            Text("Saldo Atual", fontSize = 12.sp, color = Color.White.copy(alpha = 0.8f))
+                            Text(
+                                "R$ %.2f".format(saldoAtual),
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Botões de ação: Sangria e Reforço
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = { showDepositDialog = true },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF9C27B0))
+                    ) {
+                        Icon(Icons.Default.AddCircle, null, tint = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Reforço de Caixa", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = { showWithdrawalDialog = true },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFFFF5722))
+                    ) {
+                        Icon(Icons.Default.RemoveCircle, null, tint = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Sangria", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Lista de Movimentações
+                Card(
+                    modifier = Modifier.fillMaxWidth().weight(1f).widthIn(max = maxWidthContent),
+                    elevation = 2.dp,
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.PointOfSale,
-                            contentDescription = null,
-                            modifier = Modifier.size(100.dp),
-                            tint = Color.Gray.copy(alpha = 0.4f)
-                        )
-                        Spacer(Modifier.height(20.dp))
-                        Text(
-                            "Caixa Fechado",
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Gray
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Abra o caixa para começar a registrar vendas",
-                            fontSize = 16.sp,
-                            color = Color.Gray
-                        )
+                    Column {
+                        // Header
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colors.primary.copy(alpha = 0.1f))
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Movimentações do Caixa",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "${movements.size} registro(s)",
+                                fontSize = 14.sp,
+                                color = Color.Gray
+                            )
+                        }
+
+                        Divider()
+
+                        if (movements.isEmpty()) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Default.Receipt,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(64.dp),
+                                        tint = Color.Gray.copy(alpha = 0.5f)
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    Text("Nenhuma movimentação ainda", color = Color.Gray, fontSize = 16.sp)
+                                    Text("As vendas e operações aparecerão aqui", fontSize = 14.sp, color = Color.Gray)
+                                }
+                            }
+                        } else {
+                            LazyColumn(modifier = Modifier.padding(8.dp)) {
+                                items(movements.reversed()) { movement ->
+                                    MovementItem(movement)
+                                    Divider(color = Color.Gray.copy(alpha = 0.2f))
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Caixa fechado - mostrar mensagem
+                Card(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    elevation = 2.dp,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.PointOfSale,
+                                contentDescription = null,
+                                modifier = Modifier.size(100.dp),
+                                tint = Color.Gray.copy(alpha = 0.4f)
+                            )
+                            Spacer(Modifier.height(20.dp))
+                            Text(
+                                "Caixa Fechado",
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Gray
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Abra o caixa para começar a registrar vendas",
+                                fontSize = 16.sp,
+                                color = Color.Gray
+                            )
+                        }
                     }
                 }
             }
+        }
+
+        if (outerScroll.maxValue > 0) {
+            VerticalScrollbar(adapter = rememberScrollbarAdapter(outerScroll), modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(8.dp))
         }
     }
 

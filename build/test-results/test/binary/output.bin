@@ -1,0 +1,11 @@
+%=== Inicializando banco de dados ===
+g📁 Diretório de trabalho: /home/lucas_marruda/Documentos/pessoal/gitPessoal/PDV/desktop/pdv-compose
+3✓ Conexão estabelecida: jdbc:sqlite:pdv_data.db
+ ✓ Tabelas criadas com sucesso
+#✓ Banco de dados pronto para uso
+-✓ INSERT venda executado, rows affected: 1
+✓ Venda criada com ID: 2
+&  ✓ Item salvo: Arroz Tipo 1 5kg x1
+5✓ Venda salva com sucesso (ID: 2, Total: R$ 25,90)
+SmokeTest: saleId = 2
+(✓ Conexão com banco de dados fechada

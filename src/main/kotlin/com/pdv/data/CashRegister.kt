@@ -115,7 +115,8 @@ class CashRegisterDao {
                         "type" to rs.getString("type"),
                         "amount" to rs.getDouble("amount"),
                         "description" to rs.getString("description"),
-                        "created_at" to rs.getString("created_at")
+                        "created_at" to rs.getString("created_at"),
+                        "session_id" to rs.getLong("session_id")
                     )
                 )
             }
@@ -125,5 +126,55 @@ class CashRegisterDao {
             emptyList()
         }
     }
-}
 
+    // Retorna lista de movimentos no período (inclusive)
+    fun findByPeriod(startDate: String, endDate: String): List<Map<String, Any>> {
+        val conn = getConn() ?: return emptyList()
+        return try {
+            val movements = mutableListOf<Map<String, Any>>()
+            val stmt = conn.prepareStatement(
+                "SELECT * FROM cash_movement WHERE date(created_at) >= date(?) AND date(created_at) <= date(?) ORDER BY created_at ASC"
+            )
+            stmt.setString(1, startDate)
+            stmt.setString(2, endDate)
+            val rs = stmt.executeQuery()
+            while (rs.next()) {
+                movements.add(
+                    mapOf(
+                        "id" to rs.getLong("id"),
+                        "session_id" to rs.getLong("session_id"),
+                        "type" to rs.getString("type"),
+                        "amount" to rs.getDouble("amount"),
+                        "description" to rs.getString("description"),
+                        "created_at" to rs.getString("created_at")
+                    )
+                )
+            }
+            movements
+        } catch (e: SQLException) {
+            println("✗ Erro ao buscar movimentos por período: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // Insere movimento e retorna id gerado
+    fun registerMovement(sessionId: Long, type: String, amount: Double, description: String? = null, operator: String? = null): Long {
+        val conn = getConn() ?: return 0L
+        return try {
+            val stmt = conn.prepareStatement(
+                "INSERT INTO cash_movement (session_id, type, amount, description) VALUES (?, ?, ?, ?)",
+                java.sql.Statement.RETURN_GENERATED_KEYS
+            )
+            stmt.setLong(1, sessionId)
+            stmt.setString(2, type)
+            stmt.setDouble(3, amount)
+            stmt.setString(4, description)
+            stmt.executeUpdate()
+            val rs = stmt.generatedKeys
+            if (rs.next()) rs.getLong(1) else 0L
+        } catch (e: SQLException) {
+            println("✗ Erro ao registrar movimento de caixa: ${e.message}")
+            0L
+        }
+    }
+}

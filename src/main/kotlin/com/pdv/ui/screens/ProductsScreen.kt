@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pdv.data.Product
@@ -18,6 +19,10 @@ import com.pdv.data.ProductDao
 import com.pdv.data.UserSession
 import com.pdv.data.Permission
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.rememberScrollbarAdapter
 
 @Composable
 fun ProductsScreen(snackbarHostState: SnackbarHostState) {
@@ -38,145 +43,154 @@ fun ProductsScreen(snackbarHostState: SnackbarHostState) {
         it.category?.contains(searchQuery, ignoreCase = true) == true
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "Gerenciar Produtos",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold
+    val outerScroll = rememberScrollState()
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val maxWidthContent: Dp = if (this.maxWidth < 1000.dp) this.maxWidth - 32.dp else 980.dp
+        Column(modifier = Modifier.fillMaxSize().verticalScroll(outerScroll).padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Gerenciar Produtos",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                if (canAddProducts) {
+                    Button(
+                        onClick = { showDialog = true },
+                        colors = ButtonDefaults.buttonColors(
+                            backgroundColor = MaterialTheme.colors.primary
+                        )
+                    ) {
+                        Icon(Icons.Default.Add, "Adicionar")
+                        Spacer(Modifier.width(4.dp))
+                        Text("Novo Produto")
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // Busca
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text("Buscar produto") },
+                placeholder = { Text("Nome, SKU ou categoria...") },
+                modifier = Modifier.fillMaxWidth(),
+                leadingIcon = { Icon(Icons.Default.Search, "Buscar") },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Clear, "Limpar")
+                        }
+                    }
+                }
             )
-            if (canAddProducts) {
-                Button(
-                    onClick = { showDialog = true },
-                    colors = ButtonDefaults.buttonColors(
-                        backgroundColor = MaterialTheme.colors.primary
-                    )
+
+            Spacer(Modifier.height(16.dp))
+
+            // Estatísticas
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Card(
+                    modifier = Modifier.weight(1f),
+                    elevation = 2.dp,
+                    backgroundColor = Color(0xFFE3F2FD)
                 ) {
-                    Icon(Icons.Default.Add, "Adicionar")
-                    Spacer(Modifier.width(4.dp))
-                    Text("Novo Produto")
-                }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Busca
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            label = { Text("Buscar produto") },
-            placeholder = { Text("Nome, SKU ou categoria...") },
-            modifier = Modifier.fillMaxWidth(),
-            leadingIcon = { Icon(Icons.Default.Search, "Buscar") },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { searchQuery = "" }) {
-                        Icon(Icons.Default.Clear, "Limpar")
-                    }
-                }
-            }
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        // Estatísticas
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Card(
-                modifier = Modifier.weight(1f),
-                elevation = 2.dp,
-                backgroundColor = Color(0xFFE3F2FD)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Total de Produtos", fontSize = 12.sp, color = Color.Gray)
-                    Text(
-                        "${products.size}",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colors.primary
-                    )
-                }
-            }
-
-            Card(
-                modifier = Modifier.weight(1f),
-                elevation = 2.dp,
-                backgroundColor = Color(0xFFFFF3E0)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Estoque Baixo", fontSize = 12.sp, color = Color.Gray)
-                    val lowStock = products.count { it.isLowStock() }
-                    Text(
-                        "$lowStock",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (lowStock > 0) Color(0xFFFF6F00) else Color(0xFF4CAF50)
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Lista de produtos
-        Card(modifier = Modifier.weight(1f).fillMaxWidth(), elevation = 2.dp) {
-            if (filteredProducts.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.Inventory,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = Color.Gray
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Total de Produtos", fontSize = 12.sp, color = Color.Gray)
+                        Text(
+                            "${products.size}",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colors.primary
                         )
-                        Spacer(Modifier.height(8.dp))
-                        Text("Nenhum produto encontrado", color = Color.Gray)
                     }
                 }
-            } else {
-                LazyColumn(modifier = Modifier.padding(8.dp)) {
-                    items(filteredProducts) { product ->
-                        ProductCard(
-                            product = product,
-                            canEdit = canEditProducts,
-                            canDelete = canDeleteProducts,
-                            onEdit = {
-                                // TODO: implementar edição
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Edição em desenvolvimento")
-                                }
-                            },
-                            onDelete = {
-                                productDao.delete(product.sku)
-                                products = productDao.findAll()
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Produto removido")
-                                }
-                            }
+
+                Card(
+                    modifier = Modifier.weight(1f),
+                    elevation = 2.dp,
+                    backgroundColor = Color(0xFFFFF3E0)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Estoque Baixo", fontSize = 12.sp, color = Color.Gray)
+                        val lowStock = products.count { it.isLowStock() }
+                        Text(
+                            "$lowStock",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (lowStock > 0) Color(0xFFFF6F00) else Color(0xFF4CAF50)
                         )
-                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // Lista de produtos
+            Card(modifier = Modifier.fillMaxWidth().weight(1f).widthIn(max = maxWidthContent), elevation = 2.dp) {
+                if (filteredProducts.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.Inventory,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = Color.Gray
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text("Nenhum produto encontrado", color = Color.Gray)
+                        }
+                    }
+                } else {
+                    LazyColumn(modifier = Modifier.padding(8.dp)) {
+                        items(filteredProducts) { product ->
+                            ProductCard(
+                                product = product,
+                                canEdit = canEditProducts,
+                                canDelete = canDeleteProducts,
+                                onEdit = {
+                                    // TODO: implementar edição
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Edição em desenvolvimento")
+                                    }
+                                },
+                                onDelete = {
+                                    productDao.delete(product.sku)
+                                    products = productDao.findAll()
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Produto removido")
+                                    }
+                                }
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
                     }
                 }
             }
         }
-    }
 
-    if (showDialog) {
-        ProductDialog(
-            onDismiss = { showDialog = false },
-            onSave = { product ->
-                productDao.save(product)
-                products = productDao.findAll()
-                showDialog = false
-                scope.launch {
-                    snackbarHostState.showSnackbar("Produto adicionado com sucesso!")
+        if (outerScroll.maxValue > 0) {
+            VerticalScrollbar(adapter = rememberScrollbarAdapter(outerScroll), modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(8.dp))
+        }
+
+        if (showDialog) {
+            ProductDialog(
+                onDismiss = { showDialog = false },
+                onSave = { product ->
+                    productDao.save(product)
+                    products = productDao.findAll()
+                    showDialog = false
+                    scope.launch {
+                        snackbarHostState.showSnackbar("Produto adicionado com sucesso!")
+                    }
                 }
-            }
-        )
+            )
+        }
     }
 }
 
@@ -349,4 +363,3 @@ fun ProductDialog(onDismiss: () -> Unit, onSave: (Product) -> Unit) {
         }
     )
 }
-

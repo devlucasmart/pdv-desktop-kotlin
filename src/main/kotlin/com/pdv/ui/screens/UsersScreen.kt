@@ -11,10 +11,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pdv.data.*
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.foundation.layout.BoxWithConstraints
 
 @Composable
 fun UsersScreen(snackbarHostState: SnackbarHostState) {
@@ -51,82 +57,91 @@ fun UsersScreen(snackbarHostState: SnackbarHostState) {
         return
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    "Gerenciar Usuários",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "Controle de acesso e permissões",
-                    fontSize = 14.sp,
-                    color = Color.Gray
-                )
-            }
-            Button(
-                onClick = { showDialog = true },
-                colors = ButtonDefaults.buttonColors(
-                    backgroundColor = MaterialTheme.colors.primary
-                )
+    val outerScroll = rememberScrollState()
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val maxWidthContent: Dp = if (this.maxWidth < 1000.dp) this.maxWidth - 32.dp else 980.dp
+        Column(modifier = Modifier.fillMaxSize().verticalScroll(outerScroll).padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.PersonAdd, "Adicionar")
-                Spacer(Modifier.width(4.dp))
-                Text("Novo Usuário")
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Lista de usuários
-        Card(modifier = Modifier.weight(1f).fillMaxWidth(), elevation = 2.dp) {
-            if (users.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Nenhum usuário cadastrado", color = Color.Gray)
+                Column {
+                    Text(
+                        "Gerenciar Usuários",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Controle de acesso e permissões",
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
                 }
-            } else {
-                LazyColumn(modifier = Modifier.padding(8.dp)) {
-                    items(users) { user ->
-                        UserCard(
-                            user = user,
-                            onDelete = {
-                                userDao.delete(user.username)
-                                users = userDao.findAll()
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Usuário removido")
+                Button(
+                    onClick = { showDialog = true },
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = MaterialTheme.colors.primary
+                    )
+                ) {
+                    Icon(Icons.Default.PersonAdd, "Adicionar")
+                    Spacer(Modifier.width(4.dp))
+                    Text("Novo Usuário")
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // Lista de usuários
+            Card(modifier = Modifier.fillMaxWidth().weight(1f).widthIn(max = maxWidthContent), elevation = 2.dp) {
+                if (users.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Nenhum usuário cadastrado", color = Color.Gray)
+                    }
+                } else {
+                    LazyColumn(modifier = Modifier.padding(8.dp)) {
+                        items(users) { user ->
+                            UserCard(
+                                user = user,
+                                onDelete = {
+                                    userDao.delete(user.username)
+                                    users = userDao.findAll()
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Usuário removido")
+                                    }
+                                },
+                                onResetPassword = {
+                                    userDao.changePassword(user.username, "123456")
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Senha resetada para: 123456")
+                                    }
                                 }
-                            },
-                            onResetPassword = {
-                                userDao.changePassword(user.username, "123456")
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Senha resetada para: 123456")
-                                }
-                            }
-                        )
-                        Spacer(Modifier.height(8.dp))
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
                     }
                 }
             }
         }
-    }
 
-    if (showDialog) {
-        UserDialog(
-            onDismiss = { showDialog = false },
-            onSave = { user ->
-                userDao.save(user)
-                users = userDao.findAll()
-                showDialog = false
-                scope.launch {
-                    snackbarHostState.showSnackbar("Usuário criado com sucesso!")
+        if (outerScroll.maxValue > 0) {
+            VerticalScrollbar(adapter = rememberScrollbarAdapter(outerScroll), modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(8.dp))
+        }
+
+        if (showDialog) {
+            UserDialog(
+                onDismiss = { showDialog = false },
+                onSave = { user ->
+                    userDao.save(user)
+                    users = userDao.findAll()
+                    showDialog = false
+                    scope.launch {
+                        snackbarHostState.showSnackbar("Usuário criado com sucesso!")
+                    }
                 }
-            }
-        )
+            )
+        }
     }
 }
 
@@ -369,4 +384,3 @@ fun UserDialog(onDismiss: () -> Unit, onSave: (User) -> Unit) {
         }
     )
 }
-

@@ -15,12 +15,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pdv.data.UserDao
 import com.pdv.data.UserSession
+import com.pdv.data.Config
 import com.pdv.ui.theme.ThemeManager
 import kotlinx.coroutines.launch
+import java.net.HttpURLConnection
+import java.net.URL
+import org.json.JSONObject
+import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 @Composable
 fun LoginScreen(
@@ -36,6 +45,13 @@ fun LoginScreen(
     val userDao = remember { UserDao() }
     val scope = rememberCoroutineScope()
     val isDarkTheme = ThemeManager.isDarkTheme
+
+    // Connection choices (local/remote)
+    var useRemote by remember { mutableStateOf(Config.clientUseRemote) }
+    var hostInput by remember { mutableStateOf(Config.clientHost) }
+    var portInput by remember { mutableStateOf(Config.clientPort.toString()) }
+
+    val scrollState = rememberScrollState()
 
     Box(
         modifier = Modifier.fillMaxSize()
@@ -75,181 +91,289 @@ fun LoginScreen(
             }
         }
 
-        Card(
-            modifier = Modifier
-                .width(450.dp)
-                .padding(24.dp),
-            elevation = 8.dp,
-            shape = RoundedCornerShape(16.dp),
-            backgroundColor = MaterialTheme.colors.surface
-        ) {
-            Column(
-                modifier = Modifier.padding(40.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+        BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            val maxCardWidth: Dp = if (this.maxWidth < 700.dp) this.maxWidth * 0.9f else 600.dp
+
+            Card(
+                modifier = Modifier
+                    .widthIn(max = maxCardWidth)
+                    .padding(24.dp),
+                elevation = 8.dp,
+                shape = RoundedCornerShape(16.dp),
+                backgroundColor = MaterialTheme.colors.surface
             ) {
-                // Logo/Ícone
-                Icon(
-                    Icons.Default.ShoppingCart,
-                    contentDescription = "PDV",
-                    modifier = Modifier.size(80.dp),
-                    tint = MaterialTheme.colors.primary
-                )
-
-                Spacer(Modifier.height(16.dp))
-
-                // Título
-                Text(
-                    "PDV Desktop",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colors.primary
-                )
-
-                Text(
-                    "Sistema de Ponto de Venda",
-                    fontSize = 14.sp,
-                    color = Color.Gray
-                )
-
-                Spacer(Modifier.height(32.dp))
-
-                // Campo de usuário
-                OutlinedTextField(
-                    value = username,
-                    onValueChange = {
-                        username = it
-                        errorMessage = ""
-                    },
-                    label = { Text("Usuário") },
-                    placeholder = { Text("Digite seu usuário") },
-                    leadingIcon = {
-                        Icon(Icons.Default.Person, "Usuário")
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    enabled = !isLoading
-                )
-
-                Spacer(Modifier.height(16.dp))
-
-                // Campo de senha
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = {
-                        password = it
-                        errorMessage = ""
-                    },
-                    label = { Text("Senha") },
-                    placeholder = { Text("Digite sua senha") },
-                    leadingIcon = {
-                        Icon(Icons.Default.Lock, "Senha")
-                    },
-                    trailingIcon = {
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                Row {
+                    // Content area with vertical scroll
+                    Box(modifier = Modifier.fillMaxWidth().verticalScroll(scrollState)) {
+                        Column(
+                            modifier = Modifier.padding(28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            // Logo/Ícone
                             Icon(
-                                if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                "Toggle senha"
+                                Icons.Default.ShoppingCart,
+                                contentDescription = "PDV",
+                                modifier = Modifier.size(80.dp),
+                                tint = MaterialTheme.colors.primary
+                            )
+
+                            Spacer(Modifier.height(16.dp))
+
+                            // Título
+                            Text(
+                                "PDV Desktop",
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colors.primary
+                            )
+
+                            Text(
+                                "Sistema de Ponto de Venda",
+                                fontSize = 14.sp,
+                                color = Color.Gray
+                            )
+
+                            Spacer(Modifier.height(32.dp))
+
+                            // Campo de usuário
+                            OutlinedTextField(
+                                value = username,
+                                onValueChange = {
+                                    username = it
+                                    errorMessage = ""
+                                },
+                                label = { Text("Usuário") },
+                                placeholder = { Text("Digite seu usuário") },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Person, "Usuário")
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                enabled = !isLoading
+                            )
+
+                            Spacer(Modifier.height(16.dp))
+
+                            // Campo de senha
+                            OutlinedTextField(
+                                value = password,
+                                onValueChange = {
+                                    password = it
+                                    errorMessage = ""
+                                },
+                                label = { Text("Senha") },
+                                placeholder = { Text("Digite sua senha") },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Lock, "Senha")
+                                },
+                                trailingIcon = {
+                                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                        Icon(
+                                            if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                            "Toggle senha"
+                                        )
+                                    }
+                                },
+                                visualTransformation = if (passwordVisible) {
+                                    VisualTransformation.None
+                                } else {
+                                    PasswordVisualTransformation()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                enabled = !isLoading
+                            )
+
+                            // Mensagem de erro
+                            if (errorMessage.isNotEmpty()) {
+                                Spacer(Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Error,
+                                        contentDescription = null,
+                                        tint = Color.Red,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        errorMessage,
+                                        color = Color.Red,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.height(24.dp))
+
+                            // Conexão (local / host custom)
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Text("Conexão", fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(8.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    RadioButton(selected = !useRemote, onClick = { useRemote = false })
+                                    Text("Localhost", modifier = Modifier.padding(end = 12.dp))
+                                    RadioButton(selected = useRemote, onClick = { useRemote = true })
+                                    Text("Usar host/personalizado")
+                                }
+
+                                if (useRemote) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedTextField(value = hostInput, onValueChange = { hostInput = it }, label = { Text("Host (IP ou hostname)") }, modifier = Modifier.weight(1f), singleLine = true)
+                                        OutlinedTextField(value = portInput, onValueChange = { portInput = it.filter { ch -> ch.isDigit() } }, label = { Text("Porta") }, modifier = Modifier.width(110.dp), singleLine = true)
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                                        OutlinedButton(onClick = {
+                                            // salvar escolha
+                                            Config.clientUseRemote = true
+                                            Config.clientHost = hostInput
+                                            Config.clientPort = portInput.toIntOrNull() ?: Config.clientPort
+                                        }) {
+                                            Text("Salvar conexão")
+                                        }
+                                    }
+                                } else {
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                                        OutlinedButton(onClick = {
+                                            Config.clientUseRemote = false
+                                            Config.clientHost = "localhost"
+                                            Config.clientPort = 8080
+                                            hostInput = Config.clientHost
+                                            portInput = Config.clientPort.toString()
+                                        }) {
+                                            Text("Usar localhost")
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(24.dp))
+
+                            // Botão de login
+                            Button(
+                                onClick = {
+                                    // aplicar configurações de conexão antes de autenticar
+                                    Config.clientUseRemote = useRemote
+                                    Config.clientHost = hostInput
+                                    Config.clientPort = portInput.toIntOrNull() ?: Config.clientPort
+
+                                    // (Ainda autenticação local via UserDao; se futuramente quisermos autenticar via servidor remoto, adaptar aqui.)
+                                    if (username.isBlank() || password.isBlank()) {
+                                        errorMessage = "Preencha usuário e senha"
+                                        return@Button
+                                    }
+
+                                    isLoading = true
+                                    scope.launch {
+                                        var user: com.pdv.data.User? = null
+                                        // tentar autenticar remotamente se configurado
+                                        if (Config.clientUseRemote) {
+                                            try {
+                                                val url = URL("http://${Config.clientHost}:${Config.clientPort}/api/auth")
+                                                val conn = (url.openConnection() as HttpURLConnection).apply {
+                                                    requestMethod = "POST"
+                                                    doOutput = true
+                                                    setRequestProperty("Content-Type", "application/json")
+                                                }
+                                                val payload = JSONObject().put("username", username).put("password", password).toString()
+                                                conn.outputStream.use { it.write(payload.toByteArray()) }
+                                                val code = conn.responseCode
+                                                if (code in 200..299) {
+                                                    val respText = conn.inputStream.bufferedReader().readText()
+                                                    val jr = JSONObject(respText)
+                                                    // construir um User mínimo local a partir da resposta
+                                                    val id = jr.optLong("id", 0L)
+                                                    val uname = jr.optString("username", username)
+                                                    val fullName = jr.optString("fullName", uname)
+                                                    val roleName = jr.optString("role", "CASHIER")
+                                                    val role = try { com.pdv.data.UserRole.valueOf(roleName) } catch (t: Exception) { com.pdv.data.UserRole.CASHIER }
+                                                    user = com.pdv.data.User(id = id, username = uname, password = password, fullName = fullName, role = role)
+                                                } else {
+                                                    // fallback: set error message but continue to local auth below
+                                                    val err = try { conn.errorStream?.bufferedReader()?.readText() } catch (_: Exception) { "" }
+                                                    println("✗ Autenticação remota falhou: HTTP $code - $err")
+                                                }
+                                            } catch (e: Exception) {
+                                                println("✗ Erro ao contatar servidor remoto: ${e.message}")
+                                            }
+                                        }
+
+                                        if (user == null) {
+                                            // autenticação local
+                                            val localUser = userDao.authenticate(username, password)
+                                            if (localUser != null) user = localUser
+                                        }
+
+                                        isLoading = false
+
+                                        if (user != null) {
+                                            // login bem-sucedido
+                                            com.pdv.data.UserSession.login(user)
+                                            println("✓ Login bem-sucedido: ${user.fullName} (${user.role.displayName})")
+                                            onLoginSuccess()
+                                        } else {
+                                            errorMessage = "Usuário ou senha incorretos"
+                                        }
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(50.dp),
+                                enabled = !isLoading,
+                                colors = ButtonDefaults.buttonColors(
+                                    backgroundColor = MaterialTheme.colors.primary
+                                )
+                            ) {
+                                if (isLoading) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                } else {
+                                    Icon(Icons.Default.Login, "Login")
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("ENTRAR", fontSize = 16.sp)
+                                }
+                            }
+
+                            Spacer(Modifier.height(16.dp))
+
+                            // Botão de ajuda
+                            TextButton(
+                                onClick = { showHelpDialog = true }
+                            ) {
+                                Icon(
+                                    Icons.Default.Help,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text("Usuários de teste")
+                            }
+
+                            Spacer(Modifier.height(8.dp))
+
+                            // Versão
+                            Text(
+                                "Versão 1.0.0",
+                                fontSize = 12.sp,
+                                color = Color.Gray
                             )
                         }
-                    },
-                    visualTransformation = if (passwordVisible) {
-                        VisualTransformation.None
-                    } else {
-                        PasswordVisualTransformation()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    enabled = !isLoading
-                )
-
-                // Mensagem de erro
-                if (errorMessage.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Error,
-                            contentDescription = null,
-                            tint = Color.Red,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            errorMessage,
-                            color = Color.Red,
-                            fontSize = 14.sp
-                        )
                     }
                 }
+            }
 
-                Spacer(Modifier.height(24.dp))
-
-                // Botão de login
-                Button(
-                    onClick = {
-                        if (username.isBlank() || password.isBlank()) {
-                            errorMessage = "Preencha usuário e senha"
-                            return@Button
-                        }
-
-                        isLoading = true
-                        scope.launch {
-                            val user = userDao.authenticate(username, password)
-                            isLoading = false
-
-                            if (user != null) {
-                                UserSession.login(user)
-                                println("✓ Login bem-sucedido: ${user.fullName} (${user.role.displayName})")
-                                onLoginSuccess()
-                            } else {
-                                errorMessage = "Usuário ou senha incorretos"
-                            }
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    enabled = !isLoading,
-                    colors = ButtonDefaults.buttonColors(
-                        backgroundColor = MaterialTheme.colors.primary
-                    )
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            color = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    } else {
-                        Icon(Icons.Default.Login, "Login")
-                        Spacer(Modifier.width(8.dp))
-                        Text("ENTRAR", fontSize = 16.sp)
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
-
-                // Botão de ajuda
-                TextButton(
-                    onClick = { showHelpDialog = true }
-                ) {
-                    Icon(
-                        Icons.Default.Help,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text("Usuários de teste")
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                // Versão
-                Text(
-                    "Versão 1.0.0",
-                    fontSize = 12.sp,
-                    color = Color.Gray
+            // Optional scrollbar for wide screens
+            if (scrollState.maxValue > 0) {
+                VerticalScrollbar(
+                    adapter = rememberScrollbarAdapter(scrollState),
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(8.dp)
                 )
             }
         }
@@ -310,4 +434,3 @@ private fun UserHelpItem(username: String, password: String, role: String, descr
         Text(description, fontSize = 12.sp, color = Color.Gray)
     }
 }
-
