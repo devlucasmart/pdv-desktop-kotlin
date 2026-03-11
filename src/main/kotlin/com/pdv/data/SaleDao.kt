@@ -19,8 +19,8 @@ class SaleDao {
 
         return try {
             val sql = """
-                INSERT INTO sale (date_time, total, subtotal, discount, payment_method, status, operator_name) 
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO sale (date_time, total, subtotal, discount, payment_method, status, operator_name, client_id, client_discount) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
 
             val now = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
@@ -42,6 +42,14 @@ class SaleDao {
                 } else {
                     saleStmt.setString(7, sale.operatorName)
                 }
+
+                // client info
+                if (sale.clientId == null) {
+                    saleStmt.setNull(8, java.sql.Types.INTEGER)
+                } else {
+                    saleStmt.setLong(8, sale.clientId)
+                }
+                saleStmt.setDouble(9, sale.clientDiscount)
 
                 val rowsAffected = saleStmt.executeUpdate()
                 println("✓ INSERT venda executado, rows affected: $rowsAffected")
@@ -138,6 +146,26 @@ class SaleDao {
                             itemsArr.put(jo)
                         }
                         payload.put("items", itemsArr)
+
+                        // se tiver clientId, incluir informações do cliente no payload
+                        try {
+                            if (sale.clientId != null) {
+                                val clientDao = ClientDao()
+                                val c = clientDao.findById(sale.clientId)
+                                if (c != null) {
+                                    val clientObj = JSONObject()
+                                    clientObj.put("id", c.id)
+                                    clientObj.put("name", c.name)
+                                    clientObj.put("document", c.document)
+                                    clientObj.put("phone", c.phone)
+                                    clientObj.put("email", c.email)
+                                    clientObj.put("default_discount_percent", c.defaultDiscountPercent)
+                                    payload.put("client", clientObj)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            println("✗ Falha ao anexar cliente ao payload: ${e.message}")
+                        }
                         outbox.enqueue(payload.getString("client_uuid"), payload.toString())
                         println("→ Venda enfileirada para sincronização remota (outbox)")
                     }

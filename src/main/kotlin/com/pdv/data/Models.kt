@@ -41,6 +41,19 @@ data class SaleItem(
     }
 }
 
+data class Client(
+    val id: Long = 0,
+    val name: String,
+    val document: String? = null,
+    val phone: String? = null,
+    val email: String? = null,
+    val address: String? = null,
+    // default discount em percentual (ex.: 10.0 = 10%)
+    val defaultDiscountPercent: Double = 0.0,
+    val active: Boolean = true,
+    val createdAt: String = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+)
+
 data class Sale(
     val id: Long = 0,
     val dateTime: String = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
@@ -50,17 +63,20 @@ data class Sale(
     val status: String = "COMPLETED",
     val operatorName: String? = null,
     private val _total: Double = 0.0,
-    private val _subtotal: Double = 0.0
+    private val _subtotal: Double = 0.0,
+    // Referência opcional a cliente e desconto aplicado (valor absoluto)
+    val clientId: Long? = null,
+    val clientDiscount: Double = 0.0
 ) {
     val total: Double
-        get() = if (_total > 0.0) _total else items.sumOf { it.total } - discount
+        get() = if (_total > 0.0) _total else items.sumOf { it.total } - discount - clientDiscount
 
     val subtotal: Double
         get() = if (_subtotal > 0.0) _subtotal else items.sumOf { it.totalWithoutDiscount }
 
     // Compatibilidade: alias para APIs existentes
     val totalDiscount: Double
-        get() = discount
+        get() = discount + clientDiscount
 
     // Expose raw backing values for serialization if needed
     fun rawTotal(): Double = _total

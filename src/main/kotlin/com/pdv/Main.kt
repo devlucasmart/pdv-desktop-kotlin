@@ -34,7 +34,7 @@ import java.net.URL
 import kotlin.system.exitProcess
 
 enum class Screen {
-    VENDAS, CAIXA, PRODUTOS, RELATORIOS, CONFIGURACOES, USUARIOS
+    VENDAS, CAIXA, PRODUTOS, CLIENTES, RELATORIOS, CONFIGURACOES, USUARIOS
 }
 
 // Gerenciador de estado da janela para permitir alternar tela cheia em tempo real
@@ -137,6 +137,23 @@ fun App() {
                             label = { Text("Produtos") },
                             selected = currentScreen == Screen.PRODUTOS,
                             onClick = { currentScreen = Screen.PRODUTOS }
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+
+                    // Clientes
+                    if (UserSession.hasPermission(Permission.VIEW_CLIENTS)) {
+                        NavigationRailItem(
+                            icon = {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = "Clientes",
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            },
+                            label = { Text("Clientes") },
+                            selected = currentScreen == Screen.CLIENTES,
+                            onClick = { currentScreen = Screen.CLIENTES }
                         )
                         Spacer(Modifier.height(8.dp))
                     }
@@ -319,6 +336,13 @@ fun App() {
                                         ProductsScreen(snackbarHostState)
                                     } else {
                                         PermissionDeniedScreen("Produtos")
+                                    }
+                                }
+                                Screen.CLIENTES -> {
+                                    if (UserSession.hasPermission(Permission.VIEW_CLIENTS)) {
+                                        ClientsScreen(snackbarHostState)
+                                    } else {
+                                        PermissionDeniedScreen("Clientes")
                                     }
                                 }
                                 Screen.RELATORIOS -> {

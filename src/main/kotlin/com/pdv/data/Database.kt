@@ -72,6 +72,23 @@ object Database {
         return connection
     }
 
+    @Synchronized
+    fun close() {
+        try {
+            connection?.let {
+                if (!it.isClosed) {
+                    it.close()
+                    println("✓ Conexão com o banco de dados fechada")
+                }
+            }
+        } catch (e: Exception) {
+            println("✗ Erro ao fechar a conexão: ${e.message}")
+        } finally {
+            connection = null
+            initialized = false
+        }
+    }
+
     private fun createTables() {
         val conn = connection ?: return
 
@@ -214,6 +231,53 @@ object Database {
         conn.createStatement().executeUpdate("""
             CREATE INDEX IF NOT EXISTS idx_outbox_status ON outbox_sale(status)
         """)
+
+        // Nova tabela de clientes
+        conn.createStatement().executeUpdate("""
+            CREATE TABLE IF NOT EXISTS client (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                document TEXT,
+                phone TEXT,
+                email TEXT,
+                address TEXT,
+                default_discount_percent REAL NOT NULL DEFAULT 0,
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+
+        // Índice para clients
+        conn.createStatement().executeUpdate("""
+            CREATE INDEX IF NOT EXISTS idx_client_name ON client(name)
+        """)
+
+        // Garantir colunas client_id e client_discount na tabela sale
+        try {
+            val rs = conn.createStatement().executeQuery("PRAGMA table_info(sale)")
+            val existingCols = mutableSetOf<String>()
+            while (rs.next()) {
+                existingCols.add(rs.getString("name"))
+            }
+            if (!existingCols.contains("client_id")) {
+                try {
+                    conn.createStatement().executeUpdate("ALTER TABLE sale ADD COLUMN client_id INTEGER")
+                    println("→ Coluna 'client_id' adicionada à tabela sale")
+                } catch (e: Exception) {
+                    println("✗ Falha ao adicionar coluna 'client_id' (pode já existir): ${e.message}")
+                }
+            }
+            if (!existingCols.contains("client_discount")) {
+                try {
+                    conn.createStatement().executeUpdate("ALTER TABLE sale ADD COLUMN client_discount REAL NOT NULL DEFAULT 0")
+                    println("→ Coluna 'client_discount' adicionada à tabela sale")
+                } catch (e: Exception) {
+                    println("✗ Falha ao adicionar coluna 'client_discount' (pode já existir): ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            println("✗ Falha ao verificar/adicionar colunas de client em sale: ${e.message}")
+        }
 
         println("✓ Tabelas criadas com sucesso")
     }
@@ -471,14 +535,42 @@ object Database {
             println("  → caixa1/caixa123 (Caixa)")
             println("  → estoque/estoque123 (Estoquista)")
         }
-    }
 
-    fun close() {
-        try {
-            connection?.close()
-            println("✓ Conexão com banco de dados fechada")
-        } catch (e: SQLException) {
-            println("✗ Erro ao fechar conexão: ${e.message}")
+        // Verifica se já existem clientes
+        val clientCountStmt = conn.createStatement()
+        val clientRs = clientCountStmt.executeQuery("SELECT COUNT(*) as count FROM client")
+        clientRs.next()
+        val clientCount = clientRs.getInt("count")
+
+        if (clientCount == 0) {
+            println("✓ Inserindo clientes de exemplo...")
+
+            val clientStmt = conn.prepareStatement("""
+                INSERT INTO client (name, document, phone, email, address, default_discount_percent) 
+                VALUES (?, ?, ?, ?, ?, ?)
+            """)
+
+            val sampleClients = listOf(
+                listOf("Cliente A", "12345678901", "1111-2222", "clientea@email.com", "Endereço A", 10.0),
+                listOf("Cliente B", "10987654321", "3333-4444", "clienteb@email.com", "Endereço B", 15.0),
+                listOf("Cliente C", "12312312312", "5555-6666", "clientec@email.com", "Endereço C", 5.0),
+                listOf("Cliente D", "32132132132", "7777-8888", "cliented@email.com", "Endereço D", 20.0),
+                listOf("Cliente E", "45645645645", "9999-0000", "clientee@email.com", "Endereço E", 0.0)
+            )
+
+            sampleClients.forEach { client ->
+                clientStmt.setString(1, client[0] as String)
+                clientStmt.setString(2, client[1] as String)
+                clientStmt.setString(3, client[2] as String)
+                clientStmt.setString(4, client[3] as String)
+                clientStmt.setString(5, client[4] as String)
+                clientStmt.setDouble(6, client[5] as Double)
+                clientStmt.executeUpdate()
+            }
+
+            println("✓ ${sampleClients.size} clientes de exemplo inseridos")
         }
+
+        println("✓ Dados de amostra verificados")
     }
 }

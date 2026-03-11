@@ -26,7 +26,10 @@ enum class UserRole(
             Permission.DELETE_PRODUCTS,
             Permission.VIEW_REPORTS,
             Permission.VIEW_SETTINGS,
-            Permission.MANAGE_USERS
+            Permission.MANAGE_USERS,
+            // Permissões de clientes
+            Permission.VIEW_CLIENTS,
+            Permission.MANAGE_CLIENTS
         )
     ),
     MANAGER(
@@ -39,7 +42,10 @@ enum class UserRole(
             Permission.ADD_PRODUCTS,
             Permission.EDIT_PRODUCTS,
             Permission.VIEW_REPORTS,
-            Permission.VIEW_SETTINGS
+            Permission.VIEW_SETTINGS,
+            // managers podem gerenciar clientes também
+            Permission.VIEW_CLIENTS,
+            Permission.MANAGE_CLIENTS
         )
     ),
     CASHIER(
@@ -74,7 +80,10 @@ enum class Permission {
     DELETE_PRODUCTS,
     VIEW_REPORTS,
     VIEW_SETTINGS,
-    MANAGE_USERS
+    MANAGE_USERS,
+    // Novas permissões de clientes
+    VIEW_CLIENTS,
+    MANAGE_CLIENTS
 }
 
 // Sessão do usuário logado
@@ -106,4 +115,3 @@ object UserSession {
         return true
     }
 }
-

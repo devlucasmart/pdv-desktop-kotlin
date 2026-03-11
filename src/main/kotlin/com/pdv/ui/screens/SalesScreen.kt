@@ -32,6 +32,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.window.Dialog
 
 @Composable
 fun SalesScreen(snackbarHostState: SnackbarHostState) {
@@ -41,6 +42,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
     var skuInput by remember { mutableStateOf("") }
     val items = remember { mutableStateListOf<SaleItem>() }
     var discount by remember { mutableStateOf(0.0) }
+    var clientAppliedDiscount by remember { mutableStateOf(0.0) }
     var showPaymentDialog by remember { mutableStateOf(false) }
     var showSuccessDialog by remember { mutableStateOf(false) }
     var showDiscountDialog by remember { mutableStateOf(false) }
@@ -49,11 +51,14 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
     val productDao = remember { ProductDao() }
     val saleDao = remember { SaleDao() }
     val cashDao = remember { CashRegisterDao() }
+    val clientDao = remember { ClientDao() }
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
 
     var currentSession by remember { mutableStateOf<CashSession?>(null) }
     var isProcessing by remember { mutableStateOf(false) }
+    var selectedClient by remember { mutableStateOf<Client?>(null) }
+    var showClientPicker by remember { mutableStateOf(false) }
 
     // Carregar sessão atual
     LaunchedEffect(Unit) {
@@ -76,7 +81,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
     }
 
     val subtotal = items.sumOf { it.total }
-    val total = (subtotal - discount).coerceAtLeast(0.0)
+    val total = (subtotal - discount - clientAppliedDiscount).coerceAtLeast(0.0)
     // number of distinct line items
     val itemCount = items.size
     // total quantity (sum of quantities) for informational display
@@ -196,6 +201,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
     fun clearCart() {
         items.clear()
         discount = 0.0
+        clientAppliedDiscount = 0.0
         lastAddedProduct = null
     }
 
@@ -241,12 +247,38 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("Vendas Hoje", fontSize = 12.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f))
-                        Text(
-                            "${salesToday} vendas • ${CurrencyUtils.format(totalToday)}",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colors.primary
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column {
+                                Text("Vendas Hoje", fontSize = 12.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f))
+                                Text(
+                                    "${salesToday} vendas • ${CurrencyUtils.format(totalToday)}",
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colors.primary
+                                )
+                            }
+
+                            Spacer(Modifier.width(12.dp))
+
+                            // Cliente selecionado e botão de seleção
+                            Column(horizontalAlignment = Alignment.End) {
+                                if (selectedClient != null) {
+                                    Text("Cliente: ${selectedClient?.name}", fontSize = 12.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.8f))
+                                    Row {
+                                        OutlinedButton(onClick = { showClientPicker = true }) {
+                                            Text("Alterar Cliente", fontSize = 12.sp)
+                                        }
+                                        Spacer(Modifier.width(8.dp))
+                                        OutlinedButton(onClick = { selectedClient = null; clientAppliedDiscount = 0.0 }) {
+                                            Text("Remover", fontSize = 12.sp)
+                                        }
+                                    }
+                                } else {
+                                    OutlinedButton(onClick = { showClientPicker = true }) {
+                                        Text("Selecionar Cliente", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -471,6 +503,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                                         items.removeAll { it.product.id == item.product.id }
                                         if (items.isEmpty()) {
                                             discount = 0.0
+                                            clientAppliedDiscount = 0.0
                                             lastAddedProduct = null
                                         }
                                     }
@@ -502,21 +535,28 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                     }
 
                     // Desconto (se houver)
-                    if (discount > 0) {
+                    if (discount > 0 || clientAppliedDiscount > 0) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Desconto:", fontSize = 16.sp, color = Color(0xFFFFCDD2))
+                                Text("Descontos:", fontSize = 16.sp, color = Color(0xFFFFCDD2))
+                                if (discount > 0) {
+                                    Text("Venda: -${CurrencyUtils.format(discount)}", fontSize = 12.sp, color = Color(0xFFFFCDD2))
+                                }
+                                if (clientAppliedDiscount > 0) {
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Cliente: -${CurrencyUtils.format(clientAppliedDiscount)}", fontSize = 12.sp, color = Color(0xFFFFCDD2))
+                                }
                                 IconButton(
-                                    onClick = { discount = 0.0 },
+                                    onClick = { discount = 0.0; clientAppliedDiscount = 0.0; selectedClient = null },
                                     modifier = Modifier.size(24.dp)
                                 ) {
                                     Icon(Icons.Default.Close, "Remover desconto", tint = Color(0xFFFFCDD2), modifier = Modifier.size(16.dp))
                                 }
                             }
-                            Text("- ${CurrencyUtils.format(discount)}", fontSize = 16.sp, color = Color(0xFFFFCDD2))
+                            Text("- ${CurrencyUtils.format(discount + clientAppliedDiscount)}", fontSize = 16.sp, color = Color(0xFFFFCDD2))
                         }
                     }
 
@@ -785,7 +825,9 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                             items = saleItems,
                             discount = saleDiscount,
                             paymentMethod = paymentMethod,
-                            operatorName = currentUser?.fullName ?: "Desconhecido"
+                            operatorName = currentUser?.fullName ?: "Desconhecido",
+                            clientId = selectedClient?.id,
+                            clientDiscount = clientAppliedDiscount
                         )
 
                         println("Venda criada. Salvando no banco...")
@@ -819,15 +861,15 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
 
                             // Mostrar sucesso
                             showSuccessDialog = true
-                            snackbarHostState.showSnackbar("✓ Venda #$saleId finalizada!")
+                            scope.launch { snackbarHostState.showSnackbar("✓ Venda #$saleId finalizada!") }
                         } else {
                             println("✗ saleId retornou 0 - falha ao salvar")
-                            snackbarHostState.showSnackbar("✗ Erro ao salvar venda. Verifique o console.")
+                            scope.launch { snackbarHostState.showSnackbar("✗ Erro ao salvar venda. Verifique o console.") }
                         }
                     } catch (e: Exception) {
                         println("✗ EXCEÇÃO ao processar venda: ${e.message}")
                         e.printStackTrace()
-                        snackbarHostState.showSnackbar("✗ Erro: ${e.message ?: "Erro desconhecido"}")
+                        scope.launch { snackbarHostState.showSnackbar("✗ Erro: ${e.message ?: "Erro desconhecido"}") }
                     } finally {
                         isProcessing = false
                         println("=== FIM DO PROCESSO DE VENDA ===")
@@ -871,6 +913,48 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                 }
             }
         )
+    }
+
+    // Client picker dialog
+    if (showClientPicker) {
+        val clients = remember { clientDao.findAll() }
+        Dialog(onCloseRequest = { showClientPicker = false }) {
+            Card(modifier = Modifier.fillMaxWidth(0.6f)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Selecionar Cliente", fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(value = "", onValueChange = {})
+                    Spacer(Modifier.height(8.dp))
+                    Column(modifier = Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
+                        clients.forEach { c ->
+                            Row(modifier = Modifier.fillMaxWidth().clickable {
+                                selectedClient = c
+                                // aplicar desconto padrão do cliente (percentual)
+                                if (c.defaultDiscountPercent > 0.0) {
+                                    // calcular desconto absoluto baseado no subtotal
+                                    clientAppliedDiscount = (items.sumOf { it.total } * (c.defaultDiscountPercent / 100.0))
+                                }
+                                showClientPicker = false
+                            }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(c.name, fontWeight = FontWeight.Medium)
+                                    Text(c.document ?: "", fontSize = 12.sp, color = Color.Gray)
+                                }
+                                if (c.defaultDiscountPercent > 0.0) {
+                                    Text("${c.defaultDiscountPercent}%", color = MaterialTheme.colors.primary)
+                                }
+                            }
+                            Divider()
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = { showClientPicker = false }) { Text("Fechar") }
+                    }
+                }
+            }
+        }
     }
 }
 
