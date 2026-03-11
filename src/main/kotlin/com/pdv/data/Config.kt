@@ -28,6 +28,12 @@ object Config {
                 props.setProperty("server.ssl.enabled", "false")
                 props.setProperty("server.ssl.keystore.path", "")
                 props.setProperty("server.ssl.keystore.password", "")
+                // Printer settings
+                props.setProperty("printer.name", "")
+                // Backup settings
+                props.setProperty("backup.enabled", "false")
+                props.setProperty("backup.path", "")
+                props.setProperty("backup.intervalHours", "24")
                 save()
             }
         } catch (e: Exception) {
@@ -93,4 +99,35 @@ object Config {
     var serverKeystorePassword: String
         get() = get("server.ssl.keystore.password", "")
         set(value) = set("server.ssl.keystore.password", value)
+
+    // Printer settings
+    var printerName: String
+        get() = get("printer.name", "")
+        set(value) = set("printer.name", value)
+
+    // Backup settings
+    var backupEnabled: Boolean
+        get() = getBoolean("backup.enabled", false)
+        set(value) = setBoolean("backup.enabled", value)
+
+    var backupPath: String
+        get() = get("backup.path", System.getProperty("user.home") + "/.pdv/backups")
+        set(value) = set("backup.path", value)
+
+    var backupIntervalHours: Int
+        get() = get("backup.intervalHours", "24").toIntOrNull() ?: 24
+        set(value) = set("backup.intervalHours", value.toString())
+
+    // Window settings
+    var fullscreen: Boolean
+        get() = getBoolean("window.fullscreen", false)
+        set(value) = setBoolean("window.fullscreen", value)
+
+    var windowMaximized: Boolean
+        get() = getBoolean("window.maximized", false)
+        set(value) = setBoolean("window.maximized", value)
+
+    var kioskMode: Boolean
+        get() = getBoolean("window.kiosk", false)
+        set(value) = setBoolean("window.kiosk", value)
 }

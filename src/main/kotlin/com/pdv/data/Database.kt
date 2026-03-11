@@ -31,6 +31,9 @@ object Database {
 
             println("✓ Conexão estabelecida: $DB_URL")
 
+            // Tentar migrar esquema antigo para o novo (se necessário)
+            performMigrations()
+
             createTables()
             insertSampleData()
 
@@ -72,20 +75,43 @@ object Database {
     private fun createTables() {
         val conn = connection ?: return
 
-        // Tabela de produtos
+        // Tabela de produtos (usar stock_quantity REAL para permitir frações e campo unit)
         conn.createStatement().executeUpdate("""
             CREATE TABLE IF NOT EXISTS product (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 sku TEXT UNIQUE NOT NULL,
                 name TEXT NOT NULL,
                 price REAL NOT NULL CHECK(price >= 0),
-                stock_quantity INTEGER NOT NULL DEFAULT 0 CHECK(stock_quantity >= 0),
+                stock_quantity REAL NOT NULL DEFAULT 0,
+                unit TEXT NOT NULL DEFAULT 'un',
                 category TEXT,
                 active INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
+
+        // Garantir coluna unit em esquemas antigos (se já existir sem a coluna)
+        try {
+            val rs = conn.createStatement().executeQuery("PRAGMA table_info(product)")
+            var hasUnit = false
+            while (rs.next()) {
+                if (rs.getString("name") == "unit") {
+                    hasUnit = true
+                    break
+                }
+            }
+            if (!hasUnit) {
+                try {
+                    conn.createStatement().executeUpdate("ALTER TABLE product ADD COLUMN unit TEXT DEFAULT 'un'")
+                    println("→ Coluna 'unit' adicionada à tabela product")
+                } catch (e: Exception) {
+                    println("✗ Falha ao adicionar coluna 'unit' (pode já existir): ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            // silencioso - PRAGMA pode falhar em algumas plataformas
+        }
 
         // Tabela de vendas
         conn.createStatement().executeUpdate("""
@@ -102,13 +128,13 @@ object Database {
             )
         """)
 
-        // Tabela de itens de venda
+        // Tabela de itens de venda (quantity como REAL para suportar medidas fracionárias)
         conn.createStatement().executeUpdate("""
             CREATE TABLE IF NOT EXISTS sale_item (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 sale_id INTEGER NOT NULL,
                 product_id INTEGER NOT NULL,
-                quantity INTEGER NOT NULL CHECK(quantity > 0),
+                quantity REAL NOT NULL CHECK(quantity > 0),
                 unit_price REAL NOT NULL CHECK(unit_price >= 0),
                 total_price REAL NOT NULL CHECK(total_price >= 0),
                 discount REAL NOT NULL DEFAULT 0 CHECK(discount >= 0),
@@ -192,6 +218,180 @@ object Database {
         println("✓ Tabelas criadas com sucesso")
     }
 
+    private fun performMigrations() {
+        val conn = connection ?: return
+        try {
+            // Migrar product: garantir stock_quantity REAL e coluna unit
+            try {
+                val rs = conn.createStatement().executeQuery("PRAGMA table_info(product)")
+                var hasStockQuantity = false
+                var stockType: String? = null
+                var hasUnit = false
+                val existingCols = mutableListOf<String>()
+                while (rs.next()) {
+                    val name = rs.getString("name")
+                    existingCols.add(name)
+                    if (name == "stock_quantity") {
+                        hasStockQuantity = true
+                        stockType = rs.getString("type")
+                    }
+                    if (name == "unit") hasUnit = true
+                }
+
+                val needsProductRewrite = (!hasStockQuantity) || (stockType != null && !stockType.equals("REAL", true))
+
+                if (needsProductRewrite) {
+                    println("→ Migrando tabela 'product' para novo esquema (stock_quantity REAL)")
+                    conn.createStatement().executeUpdate("CREATE TABLE IF NOT EXISTS product_new (id INTEGER PRIMARY KEY AUTOINCREMENT, sku TEXT UNIQUE NOT NULL, name TEXT NOT NULL, price REAL NOT NULL CHECK(price >= 0), stock_quantity REAL NOT NULL DEFAULT 0, unit TEXT NOT NULL DEFAULT 'un', category TEXT, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))")
+
+                    // Copiar dados existentes (preservar colunas que existem)
+                    val selectCols = mutableListOf<String>()
+                    if (existingCols.contains("id")) selectCols.add("id")
+                    if (existingCols.contains("sku")) selectCols.add("sku")
+                    if (existingCols.contains("name")) selectCols.add("name")
+                    if (existingCols.contains("price")) selectCols.add("price")
+                    if (existingCols.contains("stock_quantity")) selectCols.add("stock_quantity")
+                    // unit pode não existir; usar default
+                    if (existingCols.contains("category")) selectCols.add("category")
+                    if (existingCols.contains("active")) selectCols.add("active")
+                    if (existingCols.contains("created_at")) selectCols.add("created_at")
+                    if (existingCols.contains("updated_at")) selectCols.add("updated_at")
+
+                    val selectList = selectCols.joinToString(", ")
+                    val insertList = listOf("id", "sku", "name", "price", "stock_quantity", "unit", "category", "active", "created_at", "updated_at")
+                        .joinToString(", ")
+
+                    val copySql = "INSERT INTO product_new (${insertList}) SELECT " +
+                            (if (selectList.isBlank()) "null, '' , '' , 0.0, 0.0, 'un', null, 1, datetime('now'), datetime('now')" else {
+                                // montar SELECT com fallback para unit
+                                val parts = mutableListOf<String>()
+                                parts.add(if (selectCols.contains("id")) "id" else "null")
+                                parts.add(if (selectCols.contains("sku")) "sku" else "''")
+                                parts.add(if (selectCols.contains("name")) "name" else "''")
+                                parts.add(if (selectCols.contains("price")) "price" else "0.0")
+                                parts.add(if (selectCols.contains("stock_quantity")) "stock_quantity" else "0.0")
+                                // unit fallback
+                                parts.add(if (hasUnit) "unit" else "'un'")
+                                parts.add(if (selectCols.contains("category")) "category" else "null")
+                                parts.add(if (selectCols.contains("active")) "active" else "1")
+                                parts.add(if (selectCols.contains("created_at")) "created_at" else "datetime('now')")
+                                parts.add(if (selectCols.contains("updated_at")) "updated_at" else "datetime('now')")
+                                parts.joinToString(", ")
+                            })
+
+                    conn.createStatement().executeUpdate(copySql)
+                    conn.createStatement().executeUpdate("DROP TABLE IF EXISTS product")
+                    conn.createStatement().executeUpdate("ALTER TABLE product_new RENAME TO product")
+                    conn.createStatement().executeUpdate("CREATE INDEX IF NOT EXISTS idx_product_sku ON product(sku)")
+
+                    println("→ Migração product concluída")
+                } else if (!hasUnit) {
+                    // apenas adicionar coluna unit se necessário
+                    try {
+                        conn.createStatement().executeUpdate("ALTER TABLE product ADD COLUMN unit TEXT DEFAULT 'un'")
+                        println("→ Coluna 'unit' adicionada à tabela product")
+                    } catch (e: Exception) {
+                        println("✗ Falha ao adicionar coluna 'unit' durante migração: ${e.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                // ignorar problemas menores de migração
+                println("✗ Verificação/migração product falhou: ${e.message}")
+            }
+
+            // Migrar sale_item.quantity para REAL
+            try {
+                val rs2 = conn.createStatement().executeQuery("PRAGMA table_info(sale_item)")
+                var hasQuantity = false
+                var qtyType: String? = null
+                val existingCols = mutableListOf<String>()
+                while (rs2.next()) {
+                    val name = rs2.getString("name")
+                    existingCols.add(name)
+                    if (name == "quantity") {
+                        hasQuantity = true
+                        qtyType = rs2.getString("type")
+                    }
+                }
+                if (!hasQuantity || (qtyType != null && !qtyType.equals("REAL", true))) {
+                    println("→ Migrando tabela 'sale_item' para usar quantity REAL")
+                    conn.createStatement().executeUpdate("CREATE TABLE IF NOT EXISTS sale_item_new (id INTEGER PRIMARY KEY AUTOINCREMENT, sale_id INTEGER NOT NULL, product_id INTEGER NOT NULL, quantity REAL NOT NULL CHECK(quantity > 0), unit_price REAL NOT NULL CHECK(unit_price >= 0), total_price REAL NOT NULL CHECK(total_price >= 0), discount REAL NOT NULL DEFAULT 0 CHECK(discount >= 0), FOREIGN KEY (sale_id) REFERENCES sale(id) ON DELETE CASCADE, FOREIGN KEY (product_id) REFERENCES product(id))")
+
+                    // copiar dados existentes com fallback
+                    val copySql = "INSERT INTO sale_item_new (id, sale_id, product_id, quantity, unit_price, total_price, discount) SELECT id, sale_id, product_id, quantity, unit_price, total_price, discount FROM sale_item"
+                    try {
+                        conn.createStatement().executeUpdate(copySql)
+                    } catch (e: Exception) {
+                        // se tabela original não existe, ignore
+                    }
+
+                    conn.createStatement().executeUpdate("DROP TABLE IF EXISTS sale_item")
+                    conn.createStatement().executeUpdate("ALTER TABLE sale_item_new RENAME TO sale_item")
+                    conn.createStatement().executeUpdate("CREATE INDEX IF NOT EXISTS idx_sale_item_sale_id ON sale_item(sale_id)")
+
+                    println("→ Migração sale_item concluída")
+                }
+            } catch (e: Exception) {
+                println("✗ Verificação/migração sale_item falhou: ${e.message}")
+            }
+
+            // Migrar sale.total/subtotal tipos para REAL (recriar tabela se necessário)
+            try {
+                val rs3 = conn.createStatement().executeQuery("PRAGMA table_info(sale)")
+                val colTypes = mutableMapOf<String, String>()
+                val existingCols = mutableListOf<String>()
+                while (rs3.next()) {
+                    val name = rs3.getString("name")
+                    val type = rs3.getString("type")
+                    existingCols.add(name)
+                    colTypes[name] = type
+                }
+                val needsSaleRewrite = (colTypes["total"]?.equals("REAL", true) != true) || (colTypes["subtotal"]?.equals("REAL", true) != true)
+                if (needsSaleRewrite) {
+                    println("→ Migrando tabela 'sale' para novo esquema (total/subtotal REAL)")
+                    conn.createStatement().executeUpdate("CREATE TABLE IF NOT EXISTS sale_new (id INTEGER PRIMARY KEY AUTOINCREMENT, date_time TEXT NOT NULL, total REAL NOT NULL CHECK(total >= 0), subtotal REAL NOT NULL CHECK(subtotal >= 0), discount REAL NOT NULL DEFAULT 0 CHECK(discount >= 0), payment_method TEXT, status TEXT NOT NULL DEFAULT 'COMPLETED', operator_name TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))" )
+
+                    // copiar dados
+                    val copySql = StringBuilder()
+                    copySql.append("INSERT INTO sale_new (id, date_time, total, subtotal, discount, payment_method, status, operator_name, created_at) SELECT ")
+                    copySql.append("id, ")
+                    copySql.append("date_time, ")
+                    copySql.append(if (existingCols.contains("total")) "total" else "0.0")
+                    copySql.append(", ")
+                    copySql.append(if (existingCols.contains("subtotal")) "subtotal" else "0.0")
+                    copySql.append(", ")
+                    copySql.append(if (existingCols.contains("discount")) "discount" else "0.0")
+                    copySql.append(", ")
+                    copySql.append(if (existingCols.contains("payment_method")) "payment_method" else "null")
+                    copySql.append(", ")
+                    copySql.append(if (existingCols.contains("status")) "status" else "'COMPLETED'")
+                    copySql.append(", ")
+                    copySql.append(if (existingCols.contains("operator_name")) "operator_name" else "null")
+                    copySql.append(", ")
+                    copySql.append(if (existingCols.contains("created_at")) "created_at" else "datetime('now')")
+                    copySql.append(" FROM sale")
+
+                    try {
+                        conn.createStatement().executeUpdate(copySql.toString())
+                    } catch (e: Exception) {
+                        // ignore if original table not present
+                    }
+
+                    conn.createStatement().executeUpdate("DROP TABLE IF EXISTS sale")
+                    conn.createStatement().executeUpdate("ALTER TABLE sale_new RENAME TO sale")
+                    conn.createStatement().executeUpdate("CREATE INDEX IF NOT EXISTS idx_sale_date ON sale(date_time)")
+
+                    println("→ Migração sale concluída")
+                }
+            } catch (e: Exception) {
+                println("✗ Verificação/migração sale falhou: ${e.message}")
+            }
+
+        } catch (e: Exception) {
+            println("✗ Erro durante migrações: ${e.message}")
+        }
+    }
+
     private fun insertSampleData() {
         val conn = connection ?: return
 
@@ -205,29 +405,30 @@ object Database {
             println("✓ Inserindo dados de exemplo...")
 
             val stmt = conn.prepareStatement("""
-                INSERT INTO product (sku, name, price, stock_quantity, category) 
-                VALUES (?, ?, ?, ?, ?)
-            """)
+                INSERT INTO product (sku, name, price, stock_quantity, unit, category) 
+                VALUES (?, ?, ?, ?, ?, ?)
+             """)
 
             val sampleProducts = listOf(
-                listOf("001", "Coca-Cola 2L", 8.50, 50, "Bebidas"),
-                listOf("002", "Pão Francês (kg)", 12.00, 100, "Padaria"),
-                listOf("003", "Arroz Tipo 1 5kg", 25.90, 30, "Alimentos"),
-                listOf("004", "Feijão Preto 1kg", 7.80, 40, "Alimentos"),
-                listOf("005", "Café Torrado 500g", 15.50, 25, "Bebidas"),
-                listOf("006", "Açúcar Cristal 1kg", 4.20, 60, "Alimentos"),
-                listOf("007", "Leite Integral 1L", 5.80, 80, "Laticínios"),
-                listOf("008", "Manteiga 500g", 18.90, 20, "Laticínios"),
-                listOf("009", "Óleo de Soja 900ml", 7.50, 45, "Alimentos"),
-                listOf("010", "Macarrão Espaguete 500g", 4.50, 70, "Alimentos")
+                listOf("001", "Coca-Cola 2L", 8.50, 50.0, "un", "Bebidas"),
+                listOf("002", "Pão Francês (kg)", 12.00, 100.0, "kg", "Padaria"),
+                listOf("003", "Arroz Tipo 1 5kg", 25.90, 30.0, "un", "Alimentos"),
+                listOf("004", "Feijão Preto 1kg", 7.80, 40.0, "un", "Alimentos"),
+                listOf("005", "Café Torrado 500g", 15.50, 25.0, "un", "Bebidas"),
+                listOf("006", "Açúcar Cristal 1kg", 4.20, 60.0, "un", "Alimentos"),
+                listOf("007", "Leite Integral 1L", 5.80, 80.0, "un", "Laticínios"),
+                listOf("008", "Manteiga 500g", 18.90, 20.0, "un", "Laticínios"),
+                listOf("009", "Óleo de Soja 900ml", 7.50, 45.0, "un", "Alimentos"),
+                listOf("010", "Macarrão Espaguete 500g", 4.50, 70.0, "un", "Alimentos")
             )
 
             sampleProducts.forEach { product ->
                 stmt.setString(1, product[0] as String)
                 stmt.setString(2, product[1] as String)
                 stmt.setDouble(3, product[2] as Double)
-                stmt.setInt(4, product[3] as Int)
+                stmt.setDouble(4, product[3] as Double)
                 stmt.setString(5, product[4] as String)
+                stmt.setString(6, product[5] as String)
                 stmt.executeUpdate()
             }
 

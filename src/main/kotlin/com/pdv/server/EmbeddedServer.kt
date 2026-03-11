@@ -158,7 +158,7 @@ object EmbeddedServer {
                             name = it.optString("name", ""),
                             price = it.optDouble("unit_price", 0.0)
                         )
-                        val saleItem = SaleItem(product = prod, quantity = it.optInt("quantity", 1), discount = it.optDouble("discount", 0.0))
+                        val saleItem = SaleItem(product = prod, quantity = it.optDouble("quantity", 1.0), discount = it.optDouble("discount", 0.0))
                         items.add(saleItem)
                     }
 
@@ -190,8 +190,8 @@ object EmbeddedServer {
                         val jo = JSONObject()
                         jo.put("id", s.id)
                         jo.put("date_time", s.dateTime)
-                        jo.put("total", s._total ?: s.total)
-                        jo.put("subtotal", s._subtotal ?: s.subtotal)
+                        jo.put("total", s.total)
+                        jo.put("subtotal", s.subtotal)
                         jo.put("discount", s.discount)
                         jo.put("payment_method", s.paymentMethod)
                         jo.put("status", s.status)

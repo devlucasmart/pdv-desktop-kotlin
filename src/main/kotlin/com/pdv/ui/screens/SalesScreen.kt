@@ -26,8 +26,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pdv.data.*
 import com.pdv.ui.components.PaymentDialog
+import com.pdv.util.CurrencyUtils
+import com.pdv.util.NumberUtils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.text.input.TextFieldValue
 
 @Composable
 fun SalesScreen(snackbarHostState: SnackbarHostState) {
@@ -73,18 +77,75 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
 
     val subtotal = items.sumOf { it.total }
     val total = (subtotal - discount).coerceAtLeast(0.0)
-    val itemCount = items.sumOf { it.quantity }
+    // number of distinct line items
+    val itemCount = items.size
+    // total quantity (sum of quantities) for informational display
+    val totalQuantity = items.sumOf { it.quantity }
 
     // Função para adicionar produto
-    fun addProduct() {
-        if (skuInput.isBlank() || isProcessing) return
+    // Selected product from fuzzy search
+    var searchResults by remember { mutableStateOf<List<Product>>(emptyList()) }
+    var showProductPicker by remember { mutableStateOf(false) }
+    var showQuantityDialog by remember { mutableStateOf<Pair<Product, Double>?>(null) }
 
+    // When quantity dialog confirms, add or update item
+    fun confirmAddQuantity(product: Product, qty: Double) {
+        println("→ confirmAddQuantity: ${product.sku} qty=$qty")
+        val existingIndex = items.indexOfFirst { it.product.id == product.id }
+        if (existingIndex >= 0) {
+            items[existingIndex] = SaleItem(product, qty, items[existingIndex].discount)
+            println("→ updated existing item at index $existingIndex")
+        } else {
+            items.add(SaleItem(product, qty))
+            println("→ added new item, total items=${items.size}")
+        }
+        scope.launch {
+            snackbarHostState.showSnackbar("✓ ${product.name} adicionado x${NumberUtils.formatQuantity(qty, product.unit)}")
+            try { focusRequester.requestFocus() } catch (_: Exception) {}
+        }
+    }
+
+    fun addProduct() {
+        val rawInput = skuInput
+        val normalized = rawInput.trim().uppercase()
+        if (normalized.isBlank() || isProcessing) return
+
+        println("→ addProduct: input='$rawInput' normalized='$normalized'")
         isProcessing = true
-        val product = productDao.findBySku(skuInput.trim())
+        // tolerant SKU lookup: normalized, raw, stripped leading zeros
+        var product = productDao.findBySku(normalized)
+        if (product == null && rawInput.isNotBlank()) {
+            product = productDao.findBySku(rawInput.trim())
+        }
+        if (product == null && normalized.startsWith("0")) {
+            val stripped = normalized.trimStart('0')
+            if (stripped.isNotBlank()) product = productDao.findBySku(stripped)
+        }
+
+        if (product == null) {
+            // try fuzzy search (name or SKU contains term)
+            val results = productDao.findByQuery(normalized)
+            println("→ findByQuery returned ${results.size} results for '$normalized'")
+            if (results.isEmpty()) {
+                scope.launch { snackbarHostState.showSnackbar("✗ Produto não encontrado: $rawInput") }
+                skuInput = ""
+                isProcessing = false
+                return
+            } else if (results.size == 1) {
+                product = results.first()
+            } else {
+                // multiple matches -> open picker
+                searchResults = results
+                showProductPicker = true
+                isProcessing = false
+                return
+            }
+        }
 
         if (product != null) {
-            // Verificar se o produto está ativo
-            if (!product.active) {
+             println("→ Produto encontrado: ${product.name} (SKU=${product.sku}) unit=${product.unit} stock=${product.stockQuantity}")
+             // Verificar se o produto está ativo
+             if (!product.active) {
                 scope.launch {
                     snackbarHostState.showSnackbar("⚠ Produto '${product.name}' está inativo!")
                 }
@@ -93,51 +154,43 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                 return
             }
 
-            // Verificar estoque disponível
-            val quantidadeNoCarrinho = items.find { it.product.id == product.id }?.quantity ?: 0
+            // Verificar estoque disponível (usar Double)
+            val quantidadeNoCarrinho = items.find { it.product.id == product.id }?.quantity ?: 0.0
             if (quantidadeNoCarrinho >= product.stockQuantity) {
                 scope.launch {
-                    snackbarHostState.showSnackbar("⚠ Estoque insuficiente! Disponível: ${product.stockQuantity}")
+                    snackbarHostState.showSnackbar("⚠ Estoque insuficiente! Disponível: ${product.stockQuantity} ${product.unit}")
                 }
                 skuInput = ""
                 isProcessing = false
                 return
             }
 
-            // Adicionar ou incrementar quantidade
-            val existingIndex = items.indexOfFirst { it.product.id == product.id }
-            if (existingIndex >= 0) {
-                val existingItem = items[existingIndex]
-                val newQuantity = existingItem.quantity + 1
-
-                if (newQuantity > product.stockQuantity) {
-                    scope.launch {
-                        snackbarHostState.showSnackbar("⚠ Estoque máximo atingido: ${product.stockQuantity}")
-                    }
-                    skuInput = ""
-                    isProcessing = false
-                    return
+            // If product sold by unit (un), add immediately with quantity 1.0
+            if (product.unit == "un") {
+                println("→ Auto-adding unit product ${product.sku}")
+                confirmAddQuantity(product, 1.0)
+                lastAddedProduct = product.name
+                skuInput = ""
+                // restore focus
+                scope.launch {
+                    try { focusRequester.requestFocus() } catch (_: Exception) {}
                 }
-
-                items[existingIndex] = SaleItem(product, newQuantity, existingItem.discount)
+                isProcessing = false
             } else {
-                items.add(SaleItem(product, 1))
-            }
+                // Open quantity dialog for fractional units (kg, g, L...)
+                val defaultQty = 0.1
+                showQuantityDialog = product to defaultQty
+                // product will be added/updated when quantity dialog confirmed
 
-            lastAddedProduct = product.name
-            skuInput = ""
-
-            scope.launch {
-                snackbarHostState.showSnackbar("✓ ${product.name} adicionado")
+                lastAddedProduct = product.name
+                skuInput = ""
+                isProcessing = false
             }
         } else {
-            scope.launch {
-                snackbarHostState.showSnackbar("✗ Produto não encontrado: $skuInput")
-            }
-            skuInput = ""
+            // handled above
         }
-        isProcessing = false
     }
+
 
     // Função para limpar carrinho
     fun clearCart() {
@@ -168,10 +221,11 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                         fontWeight = FontWeight.Bold
                     )
                     if (itemCount > 0) {
+                        val totalQtyDisplay = if (totalQuantity % 1.0 == 0.0) totalQuantity.toInt().toString() else String.format("%.2f", totalQuantity)
                         Text(
-                            "$itemCount item(s) no carrinho",
+                            "$itemCount itens • $totalQtyDisplay total",
                             fontSize = 14.sp,
-                            color = Color.Gray
+                            color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f)
                         )
                     }
                 }
@@ -181,17 +235,17 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                 val totalToday = remember { saleDao.getSalesToday() }
                 Card(
                     elevation = 2.dp,
-                    backgroundColor = Color(0xFFE3F2FD)
+                    backgroundColor = MaterialTheme.colors.surface
                 ) {
                     Column(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("Vendas Hoje", fontSize = 12.sp, color = Color.Gray)
+                        Text("Vendas Hoje", fontSize = 12.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f))
                         Text(
-                            "$salesToday vendas • R$ %.2f".format(totalToday),
+                            "${salesToday} vendas • ${CurrencyUtils.format(totalToday)}",
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1976D2)
+                            color = MaterialTheme.colors.primary
                         )
                     }
                 }
@@ -201,7 +255,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
             Card(
                 modifier = Modifier.fillMaxWidth().widthIn(max = maxContentWidth).padding(bottom = 12.dp),
                 elevation = 2.dp,
-                backgroundColor = if (currentSession != null) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
+                backgroundColor = if (currentSession != null) MaterialTheme.colors.surface else MaterialTheme.colors.error.copy(alpha = 0.06f)
             ) {
                 Row(
                     modifier = Modifier.padding(12.dp).fillMaxWidth(),
@@ -212,7 +266,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                         Icon(
                             if (currentSession != null) Icons.Default.LockOpen else Icons.Default.Lock,
                             contentDescription = null,
-                            tint = if (currentSession != null) Color(0xFF4CAF50) else Color(0xFFD32F2F),
+                            tint = if (currentSession != null) MaterialTheme.colors.primary else MaterialTheme.colors.error,
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(Modifier.width(8.dp))
@@ -220,7 +274,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                             Text(
                                 if (currentSession != null) "Caixa Aberto" else "Caixa Fechado",
                                 fontWeight = FontWeight.Bold,
-                                color = if (currentSession != null) Color(0xFF4CAF50) else Color(0xFFD32F2F)
+                                color = if (currentSession != null) MaterialTheme.colors.primary else MaterialTheme.colors.error
                             )
                             Text(
                                 if (currentSession != null)
@@ -228,7 +282,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                                 else
                                     "Vá para a aba 'Caixa' para abrir",
                                 fontSize = 12.sp,
-                                color = Color.Gray
+                                color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f)
                             )
                         }
                     }
@@ -242,11 +296,11 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                         val saldoCaixa = (currentSession?.initialAmount ?: 0.0) + totalMovements
 
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("Saldo em caixa", fontSize = 12.sp, color = Color.Gray)
+                            Text("Saldo em caixa", fontSize = 12.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f))
                             Text(
-                                "R$ %.2f".format(saldoCaixa),
+                                CurrencyUtils.format(saldoCaixa),
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF4CAF50)
+                                color = MaterialTheme.colors.primary
                             )
                         }
                     }
@@ -257,18 +311,18 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
             if (!canMakeSales) {
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                    backgroundColor = Color(0xFFFFEBEE),
+                    backgroundColor = MaterialTheme.colors.error.copy(alpha = 0.06f),
                     elevation = 2.dp
                 ) {
                     Row(
                         modifier = Modifier.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Block, null, tint = Color(0xFFD32F2F), modifier = Modifier.size(32.dp))
+                        Icon(Icons.Default.Block, null, tint = MaterialTheme.colors.error, modifier = Modifier.size(32.dp))
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text("Acesso Negado", fontWeight = FontWeight.Bold, color = Color(0xFFD32F2F))
-                            Text("Você não tem permissão para realizar vendas.", fontSize = 14.sp, color = Color.Gray)
+                            Text("Acesso Negado", fontWeight = FontWeight.Bold, color = MaterialTheme.colors.error)
+                            Text("Você não tem permissão para realizar vendas.", fontSize = 14.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f))
                         }
                     }
                 }
@@ -286,7 +340,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                     ) {
                         OutlinedTextField(
                             value = skuInput,
-                            onValueChange = { skuInput = it.uppercase().trim() },
+                            onValueChange = { skuInput = it.uppercase() },
                             label = { Text("SKU ou Código de Barras") },
                             placeholder = { Text("Digite o código e pressione Enter...") },
                             modifier = Modifier
@@ -308,13 +362,13 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                             trailingIcon = {
                                 if (skuInput.isNotBlank()) {
                                     IconButton(onClick = { skuInput = "" }) {
-                                        Icon(Icons.Default.Clear, "Limpar", tint = Color.Gray)
+                                        Icon(Icons.Default.Clear, "Limpar", tint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f))
                                     }
                                 }
                             },
                             colors = TextFieldDefaults.outlinedTextFieldColors(
                                 focusedBorderColor = MaterialTheme.colors.primary,
-                                unfocusedBorderColor = Color.Gray.copy(alpha = 0.5f)
+                                unfocusedBorderColor = MaterialTheme.colors.onSurface.copy(alpha = 0.3f)
                             )
                         )
 
@@ -344,9 +398,9 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                     lastAddedProduct?.let { productName ->
                         Spacer(Modifier.height(8.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colors.primary, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Último: $productName", fontSize = 12.sp, color = Color(0xFF4CAF50))
+                            Text("Último: $productName", fontSize = 12.sp, color = MaterialTheme.colors.primary)
                         }
                     }
                 }
@@ -369,17 +423,17 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                                 Icons.Default.ShoppingCart,
                                 contentDescription = null,
                                 modifier = Modifier.size(80.dp),
-                                tint = Color.Gray.copy(alpha = 0.5f)
+                                tint = MaterialTheme.colors.onSurface.copy(alpha = 0.5f)
                             )
                             Spacer(Modifier.height(16.dp))
-                            Text("Carrinho vazio", color = Color.Gray, fontSize = 20.sp, fontWeight = FontWeight.Medium)
-                            Text("Escaneie ou digite o SKU do produto para começar", color = Color.Gray, fontSize = 14.sp)
+                            Text("Carrinho vazio", color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f), fontSize = 20.sp, fontWeight = FontWeight.Medium)
+                            Text("Escaneie ou digite o SKU do produto para começar", color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f), fontSize = 14.sp)
 
                             if (currentSession == null) {
                                 Spacer(Modifier.height(16.dp))
                                 Text(
                                     "⚠ Abra o caixa primeiro",
-                                    color = Color(0xFFFF9800),
+                                    color = MaterialTheme.colors.secondary,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -391,7 +445,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(MaterialTheme.colors.primary.copy(alpha = 0.1f))
+                                .background(MaterialTheme.colors.primary.copy(alpha = 0.06f))
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -408,7 +462,8 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                                     onQuantityChange = { newQty ->
                                         val index = items.indexOfFirst { it.product.id == item.product.id }
                                         if (index >= 0) {
-                                            val validQty = newQty.coerceIn(1, item.product.stockQuantity)
+                                            val minQty = if (item.product.unit != "un") 0.1 else 1.0
+                                            val validQty = newQty.coerceIn(minQty, item.product.stockQuantity)
                                             items[index] = SaleItem(item.product, validQty, item.discount)
                                         }
                                     },
@@ -420,7 +475,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                                         }
                                     }
                                 )
-                                Divider(color = Color.Gray.copy(alpha = 0.2f))
+                                Divider(color = MaterialTheme.colors.onSurface.copy(alpha = 0.06f))
                             }
                         }
                     }
@@ -443,7 +498,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text("Subtotal ($itemCount itens):", fontSize = 16.sp, color = Color.White.copy(alpha = 0.9f))
-                        Text("R$ %.2f".format(subtotal), fontSize = 16.sp, color = Color.White)
+                        Text(CurrencyUtils.format(subtotal), fontSize = 16.sp, color = Color.White)
                     }
 
                     // Desconto (se houver)
@@ -461,7 +516,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                                     Icon(Icons.Default.Close, "Remover desconto", tint = Color(0xFFFFCDD2), modifier = Modifier.size(16.dp))
                                 }
                             }
-                            Text("-R$ %.2f".format(discount), fontSize = 16.sp, color = Color(0xFFFFCDD2))
+                            Text("- ${CurrencyUtils.format(discount)}", fontSize = 16.sp, color = Color(0xFFFFCDD2))
                         }
                     }
 
@@ -479,7 +534,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                     ) {
                         Text("TOTAL:", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         Text(
-                            "R$ %.2f".format(total),
+                            CurrencyUtils.format(total),
                             fontSize = 32.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF69F0AE)
@@ -533,7 +588,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                             },
                             modifier = Modifier.weight(2f).height(50.dp),
                             enabled = items.isNotEmpty() && canMakeSales && currentSession != null,
-                            colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF00C853))
+                            colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.secondary)
                         ) {
                             Icon(Icons.Default.Payment, "Finalizar")
                             Spacer(Modifier.width(8.dp))
@@ -553,9 +608,96 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
         }
     }
 
+    // Render product picker when fuzzy search returns multiple matches
+    if (showProductPicker) {
+        AlertDialog(
+            onDismissRequest = { showProductPicker = false },
+            title = { Text("Selecione o produto") },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
+                    searchResults.forEach { p ->
+                        Row(modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp)
+                            .clickable {
+                                showProductPicker = false
+                                showQuantityDialog = p to if (p.unit != "un") 0.1 else 1.0
+                            }
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(p.name, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(2.dp))
+                                Text("SKU: ${p.sku} • ${NumberUtils.formatQuantity(p.stockQuantity, p.unit)}", fontSize = 12.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f))
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(CurrencyUtils.format(p.price) + if (p.unit != "un") " /${p.unit}" else "", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Divider()
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showProductPicker = false }) { Text("Fechar") }
+            }
+        )
+    }
+
+    // Quantity dialog (improved with formatting + inline validation)
+    showQuantityDialog?.let { (prod, defaultQty) ->
+        var qtyField by remember { mutableStateOf(TextFieldValue(NumberUtils.formatDecimalForInput(defaultQty))) }
+        var qtyError by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showQuantityDialog = null },
+            title = { Text("Quantidade - ${prod.name}") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = qtyField,
+                        onValueChange = { tf ->
+                            val filtered = tf.text.filter { c -> c.isDigit() || c == ',' || c == '.' }
+                            // simple preserve cursor: keep same selection when possible
+                            val sel = tf.selection
+                            qtyField = TextFieldValue(filtered, sel)
+                            qtyError = ""
+                        },
+                        label = { Text("Quantidade (${prod.unit})") },
+                        placeholder = { Text(if (prod.unit != "un") "0,10" else "1") },
+                        singleLine = true,
+                        leadingIcon = { Text("Qtd") },
+                        isError = qtyError.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (qtyError.isNotBlank()) {
+                        Text(qtyError, color = MaterialTheme.colors.error, fontSize = 12.sp)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("Estoque disponível: ${NumberUtils.formatQuantity(prod.stockQuantity, prod.unit)}", fontSize = 13.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val parsed = NumberUtils.parseQuantity(qtyField.text)
+                    val minQty = if (prod.unit != "un") 0.1 else 1.0
+                    when {
+                        parsed <= 0.0 -> { qtyError = "Quantidade inválida"; return@TextButton }
+                        parsed < minQty -> { qtyError = "Mínimo ${NumberUtils.formatQuantity(minQty, prod.unit)}"; return@TextButton }
+                        parsed > prod.stockQuantity -> { qtyError = "Máximo ${NumberUtils.formatQuantity(prod.stockQuantity, prod.unit)}"; return@TextButton }
+                    }
+                    // add to cart
+                    confirmAddQuantity(prod, parsed)
+                    lastAddedProduct = prod.name
+                    showQuantityDialog = null
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { showQuantityDialog = null }) { Text("Cancelar") } }
+        )
+    }
+
     // Dialog de Desconto
     if (showDiscountDialog) {
-        var discountText by remember { mutableStateOf(if (discount > 0) "%.2f".format(discount) else "") }
+        var discountText by remember { mutableStateOf(if (discount > 0) CurrencyUtils.formatPlain(discount) else "") }
 
         AlertDialog(
             onDismissRequest = { showDiscountDialog = false },
@@ -568,7 +710,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
             },
             text = {
                 Column {
-                    Text("Subtotal: R$ %.2f".format(subtotal))
+                    Text("Subtotal: ${CurrencyUtils.format(subtotal)}")
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
                         value = discountText,
@@ -588,7 +730,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                         Spacer(Modifier.height(8.dp))
                         val newTotal = (subtotal - newDiscount).coerceAtLeast(0.0)
                         Text(
-                            "Novo total: R$ %.2f".format(newTotal),
+                            "Novo total: ${CurrencyUtils.format(newTotal)}",
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colors.primary
                         )
@@ -602,7 +744,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                         discount = newDiscount.coerceIn(0.0, subtotal)
                         showDiscountDialog = false
                         scope.launch {
-                            snackbarHostState.showSnackbar("✓ Desconto de R$ %.2f aplicado".format(discount))
+                            snackbarHostState.showSnackbar("✓ Desconto de ${CurrencyUtils.format(discount)} aplicado")
                         }
                     }
                 ) { Text("Aplicar") }
@@ -660,7 +802,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                             // Decrementar estoque
                             saleItems.forEach { item ->
                                 val product = item.product
-                                val newStock = (product.stockQuantity - item.quantity).coerceAtLeast(0)
+                                val newStock = (product.stockQuantity - item.quantity).coerceAtLeast(0.0)
                                 productDao.update(product.copy(stockQuantity = newStock))
                             }
 
@@ -701,16 +843,16 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
             onDismissRequest = { showSuccessDialog = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(32.dp))
+                    Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colors.primary, modifier = Modifier.size(32.dp))
                     Spacer(Modifier.width(12.dp))
-                    Text("Venda Concluída!", color = Color(0xFF4CAF50))
+                    Text("Venda Concluída!", color = MaterialTheme.colors.primary)
                 }
             },
             text = {
                 Column {
                     Text("A venda foi registrada com sucesso!")
                     Spacer(Modifier.height(8.dp))
-                    Text("O carrinho foi limpo e está pronto para uma nova venda.", fontSize = 14.sp, color = Color.Gray)
+                    Text("O carrinho foi limpo e está pronto para uma nova venda.", fontSize = 14.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f))
                 }
             },
             confirmButton = {
@@ -723,7 +865,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                             try { focusRequester.requestFocus() } catch (_: Exception) {}
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF4CAF50))
+                    colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary)
                 ) {
                     Text("Nova Venda", color = Color.White)
                 }
@@ -735,7 +877,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
 @Composable
 fun SaleItemCard(
     item: SaleItem,
-    onQuantityChange: (Int) -> Unit,
+    onQuantityChange: (Double) -> Unit,
     onRemove: () -> Unit
 ) {
     Row(
@@ -754,25 +896,25 @@ fun SaleItemCard(
             )
             Row {
                 Text(
-                    "R$ %.2f".format(item.product.price),
+                    CurrencyUtils.format(item.product.price),
                     fontSize = 13.sp,
-                    color = Color.Gray
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f)
                 )
-                Text(" • ", color = Color.Gray)
+                Text(" • ", color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f))
                 Text(
                     "SKU: ${item.product.sku}",
                     fontSize = 13.sp,
-                    color = Color.Gray
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f)
                 )
             }
             // Indicador de estoque
             val stockColor = when {
-                item.quantity >= item.product.stockQuantity -> Color(0xFFFF5722)
-                item.product.stockQuantity <= 5 -> Color(0xFFFF9800)
-                else -> Color.Gray
+                item.quantity >= item.product.stockQuantity -> MaterialTheme.colors.error
+                item.product.stockQuantity <= 5 -> MaterialTheme.colors.secondary
+                else -> MaterialTheme.colors.onSurface.copy(alpha = 0.7f)
             }
             Text(
-                "Estoque: ${item.product.stockQuantity}",
+                "Estoque: ${item.product.stockQuantity} ${item.product.unit}",
                 fontSize = 11.sp,
                 color = stockColor
             )
@@ -781,39 +923,41 @@ fun SaleItemCard(
         // Controle de quantidade
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.width(100.dp),
+            modifier = Modifier.width(120.dp),
             horizontalArrangement = Arrangement.Center
         ) {
+            val step = if (item.product.unit != "un") 0.1 else 1.0
             IconButton(
-                onClick = { if (item.quantity > 1) onQuantityChange(item.quantity - 1) },
-                enabled = item.quantity > 1,
+                onClick = { if (item.quantity > step) onQuantityChange((item.quantity - step).coerceAtLeast(step)) },
+                enabled = item.quantity > step,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
                     Icons.Default.RemoveCircle,
                     "Diminuir",
-                    tint = if (item.quantity > 1) MaterialTheme.colors.primary else Color.Gray.copy(alpha = 0.3f),
+                    tint = if (item.quantity > step) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface.copy(alpha = 0.3f),
                     modifier = Modifier.size(24.dp)
                 )
             }
 
             Text(
-                "${item.quantity}",
-                modifier = Modifier.width(32.dp),
+                // Mostrar com duas casas para fracionários, sem casas para unidade
+                if (item.product.unit != "un") String.format("%.2f", item.quantity) else item.quantity.toInt().toString(),
+                modifier = Modifier.width(48.dp),
                 textAlign = TextAlign.Center,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
 
             IconButton(
-                onClick = { if (item.quantity < item.product.stockQuantity) onQuantityChange(item.quantity + 1) },
+                onClick = { if (item.quantity < item.product.stockQuantity) onQuantityChange((item.quantity + step).coerceAtMost(item.product.stockQuantity)) },
                 enabled = item.quantity < item.product.stockQuantity,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
                     Icons.Default.AddCircle,
                     "Aumentar",
-                    tint = if (item.quantity < item.product.stockQuantity) MaterialTheme.colors.primary else Color.Gray.copy(alpha = 0.3f),
+                    tint = if (item.quantity < item.product.stockQuantity) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface.copy(alpha = 0.3f),
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -821,7 +965,7 @@ fun SaleItemCard(
 
         // Total do item
         Text(
-            "R$ %.2f".format(item.total),
+            CurrencyUtils.format(item.total),
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.width(100.dp),
@@ -837,8 +981,9 @@ fun SaleItemCard(
             Icon(
                 Icons.Default.Delete,
                 "Remover",
-                tint = Color(0xFFE53935)
+                tint = MaterialTheme.colors.error
             )
         }
     }
+
 }

@@ -17,18 +17,40 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import androidx.compose.ui.window.WindowPlacement
+import androidx.compose.ui.window.FrameWindowScope
+import androidx.compose.ui.unit.DpSize
+import java.awt.GraphicsEnvironment
 import com.pdv.data.*
 import com.pdv.ui.screens.*
 import com.pdv.ui.theme.ThemeManager
 import com.pdv.server.EmbeddedServer
 import com.pdv.data.Config
 import com.pdv.sync.SyncService
+import com.pdv.util.BackupService
+import com.pdv.util.PrinterService
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.system.exitProcess
 
 enum class Screen {
     VENDAS, CAIXA, PRODUTOS, RELATORIOS, CONFIGURACOES, USUARIOS
+}
+
+// Gerenciador de estado da janela para permitir alternar tela cheia em tempo real
+object WindowManager {
+    val _isFullscreen = mutableStateOf(Config.kioskMode || Config.fullscreen)
+
+    var isFullscreen: Boolean
+        get() = _isFullscreen.value
+        set(value) {
+            _isFullscreen.value = value
+            Config.kioskMode = value
+        }
+
+    fun toggleFullscreen() {
+        isFullscreen = !isFullscreen
+    }
 }
 
 @Composable
@@ -239,6 +261,20 @@ fun App() {
                                 )
 
                                 Spacer(Modifier.width(16.dp))
+
+                                // Botão de tela cheia
+                                IconButton(
+                                    onClick = {
+                                        WindowManager.toggleFullscreen()
+                                    }
+                                ) {
+                                    Icon(
+                                        if (WindowManager.isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                        contentDescription = if (WindowManager.isFullscreen) "Sair da Tela Cheia" else "Tela Cheia",
+                                        tint = if (WindowManager.isFullscreen) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
 
                                 // Botão de toggle de tema
                                 IconButton(
@@ -557,32 +593,220 @@ fun ConfigScreen() {
                     elevation = 2.dp
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
+                        // Estado da impressora
+                        var printerName by remember { mutableStateOf(Config.printerName) }
+                        var availablePrinters by remember { mutableStateOf(PrinterService.listPrinters()) }
+                        var printerDropdownExpanded by remember { mutableStateOf(false) }
+                        var printerTestResult by remember { mutableStateOf<String?>(null) }
+
                         Text(
                             "Impressora",
                             style = MaterialTheme.typography.h6
                         )
                         Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = "",
-                            onValueChange = {},
-                            label = { Text("Nome da Impressora") },
+
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = UserSession.isAdmin()
-                        )
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                OutlinedTextField(
+                                    value = if (printerName.isNotBlank()) printerName else "(Selecionar impressora)",
+                                    onValueChange = {},
+                                    label = { Text("Nome da Impressora") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    readOnly = true,
+                                    enabled = UserSession.isAdmin(),
+                                    trailingIcon = {
+                                        IconButton(onClick = {
+                                            if (UserSession.isAdmin()) {
+                                                availablePrinters = PrinterService.listPrinters()
+                                                printerDropdownExpanded = !printerDropdownExpanded
+                                            }
+                                        }) {
+                                            Icon(Icons.Default.ArrowDropDown, "Selecionar")
+                                        }
+                                    }
+                                )
+
+                                DropdownMenu(
+                                    expanded = printerDropdownExpanded,
+                                    onDismissRequest = { printerDropdownExpanded = false },
+                                    modifier = Modifier.fillMaxWidth(0.8f)
+                                ) {
+                                    if (availablePrinters.isEmpty()) {
+                                        DropdownMenuItem(onClick = {}) {
+                                            Text("Nenhuma impressora encontrada", color = Color.Gray)
+                                        }
+                                    } else {
+                                        availablePrinters.forEach { printer ->
+                                            DropdownMenuItem(onClick = {
+                                                printerName = printer
+                                                Config.printerName = printer
+                                                printerDropdownExpanded = false
+                                                printerTestResult = null
+                                            }) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(
+                                                        if (printer == printerName) Icons.Default.CheckCircle else Icons.Default.Print,
+                                                        contentDescription = null,
+                                                        tint = if (printer == printerName) MaterialTheme.colors.primary else Color.Gray,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Text(printer)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Button(
+                                onClick = {
+                                    val result = PrinterService.testPrinter(printerName)
+                                    printerTestResult = if (result.success) "✓ ${result.message}" else "✗ ${result.message}"
+                                },
+                                enabled = UserSession.isAdmin() && printerName.isNotBlank()
+                            ) {
+                                Icon(Icons.Default.Print, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Testar")
+                            }
+                        }
+
+                        if (printerTestResult != null) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                printerTestResult!!,
+                                fontSize = 12.sp,
+                                color = if (printerTestResult!!.startsWith("✓")) Color(0xFF4CAF50) else Color.Red
+                            )
+                        }
+
                         Spacer(Modifier.height(16.dp))
+                        Divider()
+                        Spacer(Modifier.height(16.dp))
+
+                        // Estado do backup
+                        var backupEnabled by remember { mutableStateOf(Config.backupEnabled) }
+                        var backupPath by remember { mutableStateOf(Config.backupPath) }
+                        var lastBackupResult by remember { mutableStateOf<String?>(null) }
+                        var backups by remember { mutableStateOf(BackupService.listBackups()) }
 
                         Text(
                             "Sistema de Backup",
                             style = MaterialTheme.typography.h6
                         )
                         Spacer(Modifier.height(8.dp))
-                        Row {
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(
-                                checked = false,
-                                onCheckedChange = {},
+                                checked = backupEnabled,
+                                onCheckedChange = { checked ->
+                                    if (UserSession.isAdmin()) {
+                                        backupEnabled = checked
+                                        Config.backupEnabled = checked
+                                        if (checked) {
+                                            BackupService.start()
+                                        } else {
+                                            BackupService.stop()
+                                        }
+                                    }
+                                },
                                 enabled = UserSession.isAdmin()
                             )
                             Text("Ativar backup automático")
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = backupPath,
+                            onValueChange = {
+                                backupPath = it
+                                Config.backupPath = it
+                            },
+                            label = { Text("Pasta de backup") },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = UserSession.isAdmin()
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    val result = BackupService.performBackup()
+                                    lastBackupResult = if (result.success) {
+                                        backups = BackupService.listBackups()
+                                        "✓ Backup criado: ${result.path}"
+                                    } else {
+                                        "✗ Erro: ${result.error}"
+                                    }
+                                },
+                                enabled = UserSession.isAdmin()
+                            ) {
+                                Icon(Icons.Default.Backup, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Backup Agora")
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    backups = BackupService.listBackups()
+                                }
+                            ) {
+                                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Atualizar Lista")
+                            }
+                        }
+
+                        if (lastBackupResult != null) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                lastBackupResult!!,
+                                fontSize = 12.sp,
+                                color = if (lastBackupResult!!.startsWith("✓")) Color(0xFF4CAF50) else Color.Red
+                            )
+                        }
+
+                        if (backups.isNotEmpty()) {
+                            Spacer(Modifier.height(12.dp))
+                            Text("Últimos backups:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Spacer(Modifier.height(4.dp))
+
+                            Column {
+                                backups.take(5).forEach { backup ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(backup.name, fontSize = 12.sp)
+                                            Text(backup.sizeFormatted, fontSize = 10.sp, color = Color.Gray)
+                                        }
+
+                                        TextButton(
+                                            onClick = {
+                                                val result = BackupService.restoreBackup(backup.path)
+                                                lastBackupResult = if (result.success) {
+                                                    "✓ Backup restaurado! Reinicie o aplicativo."
+                                                } else {
+                                                    "✗ Erro ao restaurar: ${result.error}"
+                                                }
+                                            },
+                                            enabled = UserSession.isAdmin()
+                                        ) {
+                                            Text("Restaurar", fontSize = 12.sp)
+                                        }
+                                    }
+                                    Divider()
+                                }
+                            }
                         }
                     }
                 }
@@ -709,6 +933,92 @@ fun ConfigScreen() {
 
                 Spacer(Modifier.height(16.dp))
 
+                // Configurações de Aparência
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    elevation = 2.dp
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "Aparência da Janela",
+                            style = MaterialTheme.typography.h6
+                        )
+                        Spacer(Modifier.height(8.dp))
+
+                        // Modo Tela Cheia (em tempo real)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Modo Tela Cheia", fontWeight = FontWeight.Bold)
+                                Text("Ocupa toda a tela, sem bordas e barra de tarefas", fontSize = 12.sp, color = Color.Gray)
+                            }
+                            Switch(
+                                checked = WindowManager.isFullscreen,
+                                onCheckedChange = {
+                                    WindowManager.toggleFullscreen()
+                                }
+                            )
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        // Botão para alternar tela cheia
+                        Button(
+                            onClick = { WindowManager.toggleFullscreen() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                if (WindowManager.isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (WindowManager.isFullscreen) "Sair da Tela Cheia" else "Entrar em Tela Cheia")
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+                        Divider()
+                        Spacer(Modifier.height(8.dp))
+
+                        Text("Configuração de Inicialização", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("Define como a janela abre quando o sistema inicia", fontSize = 12.sp, color = Color.Gray)
+                        Spacer(Modifier.height(8.dp))
+
+                        var startMaximized by remember { mutableStateOf(Config.windowMaximized) }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Iniciar Maximizado", fontWeight = FontWeight.Medium)
+                                Text("Abre maximizado (com bordas)", fontSize = 12.sp, color = Color.Gray)
+                            }
+                            Switch(
+                                checked = startMaximized,
+                                onCheckedChange = { checked ->
+                                    startMaximized = checked
+                                    Config.windowMaximized = checked
+                                }
+                            )
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        if (WindowManager.isFullscreen) {
+                            Text(
+                                "⚠ Pressione F11 ou use o botão no cabeçalho para sair da tela cheia",
+                                fontSize = 12.sp,
+                                color = Color(0xFFFF9800)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     elevation = 2.dp
@@ -763,12 +1073,46 @@ fun main() {
     }
 
     application {
-        Window(onCloseRequest = {
-            EmbeddedServer.stop()
-            SyncService.stop()
-            Database.close()
-            exitProcess(0)
-        }, title = "PDV Desktop") {
+        // Estado reativo para tela cheia - observa mudanças do WindowManager
+        val isFullscreen by WindowManager._isFullscreen
+
+        val windowState = rememberWindowState(
+            placement = WindowPlacement.Floating,
+            size = DpSize(1200.dp, 800.dp)
+        )
+
+        Window(
+            onCloseRequest = {
+                EmbeddedServer.stop()
+                SyncService.stop()
+                Database.close()
+                exitProcess(0)
+            },
+            title = "PDV Desktop",
+            state = windowState
+        ) {
+            // Controla fullscreen usando AWT GraphicsDevice
+            val graphicsDevice = GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice
+
+            LaunchedEffect(isFullscreen) {
+                if (isFullscreen) {
+                    // Entra em tela cheia exclusiva
+                    if (graphicsDevice.isFullScreenSupported) {
+                        graphicsDevice.fullScreenWindow = window
+                    } else {
+                        // Fallback: maximiza e remove decorações
+                        window.extendedState = java.awt.Frame.MAXIMIZED_BOTH
+                    }
+                } else {
+                    // Sai da tela cheia
+                    graphicsDevice.fullScreenWindow = null
+                    window.extendedState = java.awt.Frame.NORMAL
+                    // Restaura tamanho
+                    window.setSize(1200, 800)
+                    window.setLocationRelativeTo(null)
+                }
+            }
+
             App()
         }
     }

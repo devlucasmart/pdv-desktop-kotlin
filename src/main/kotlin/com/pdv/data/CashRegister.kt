@@ -31,8 +31,24 @@ class CashRegisterDao {
             stmt.setString(2, LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
             stmt.setDouble(3, initialAmount)
             stmt.executeUpdate()
+            // Tentar obter generatedKeys
             val rs = stmt.generatedKeys
-            if (rs.next()) rs.getLong(1) else 0L
+            var id = 0L
+            if (rs != null && rs.next()) {
+                id = rs.getLong(1)
+            }
+            // Fallback para SQLite: last_insert_rowid() se generatedKeys não retornou
+            if (id == 0L) {
+                try {
+                    val rs2 = conn.createStatement().executeQuery("SELECT last_insert_rowid()")
+                    if (rs2 != null && rs2.next()) {
+                        id = rs2.getLong(1)
+                    }
+                } catch (e: Exception) {
+                    // ignorar, manter id = 0
+                }
+            }
+            id
         } catch (e: SQLException) {
             println("✗ Erro ao abrir sessão do caixa: ${e.message}")
             0L

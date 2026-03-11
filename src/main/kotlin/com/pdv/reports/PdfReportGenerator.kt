@@ -1,6 +1,7 @@
 package com.pdv.reports
 
 import com.pdv.data.*
+import com.pdv.util.CurrencyUtils
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.pdmodel.PDPage
 import org.apache.pdfbox.pdmodel.PDPageContentStream
@@ -59,16 +60,16 @@ class PdfReportGenerator {
 
             val summaryData = listOf(
                 "Total de Vendas:" to totalSales.toString(),
-                "Faturamento Total:" to "R$ %.2f".format(totalRevenue),
+                "Faturamento Total:" to CurrencyUtils.formatPlain(totalRevenue),
                 "Vendas Hoje:" to todaySales.size.toString(),
-                "Faturamento Hoje:" to "R$ %.2f".format(todayRevenue),
-                "Ticket Médio:" to "R$ %.2f".format(averageTicket)
+                "Faturamento Hoje:" to CurrencyUtils.formatPlain(todayRevenue),
+                "Ticket Médio:" to CurrencyUtils.formatPlain(averageTicket)
             )
 
             summaryData.forEach { (label, value) ->
                 contentStream.beginText()
                 contentStream.newLineAtOffset(MARGIN, yPosition)
-                contentStream.showText("$label  $value")
+                contentStream.showText("$label  R$ $value")
                 contentStream.endText()
                 yPosition -= LINE_HEIGHT
             }
@@ -91,7 +92,7 @@ class PdfReportGenerator {
                 val total = salesList.sumOf { it.total }
                 contentStream.beginText()
                 contentStream.newLineAtOffset(MARGIN, yPosition)
-                contentStream.showText("$method: $count vendas - R$ %.2f".format(total))
+                contentStream.showText("$method: $count vendas - R$ ${CurrencyUtils.formatPlain(total)}")
                 contentStream.endText()
                 yPosition -= LINE_HEIGHT
             }
@@ -150,7 +151,8 @@ class PdfReportGenerator {
                 contentStream.setFont(PDType1Font.HELVETICA, FONT_SIZE_SMALL)
                 contentStream.beginText()
                 contentStream.newLineAtOffset(MARGIN + 20, yPosition)
-                contentStream.showText("Qtd. Total: $totalItems un. | Valor em Estoque: R$ %.2f".format(totalValue))
+                // totalItems pode ser fracionário; exibir sem unidade agregada
+                contentStream.showText("Qtd. Total: ${formatQtySimple(totalItems)} | Valor em Estoque: R$ ${CurrencyUtils.formatPlain(totalValue)}")
                 contentStream.endText()
                 yPosition -= LINE_HEIGHT
 
@@ -158,7 +160,7 @@ class PdfReportGenerator {
                 productList.take(5).forEach { product ->
                     contentStream.beginText()
                     contentStream.newLineAtOffset(MARGIN + 20, yPosition)
-                    contentStream.showText("- ${product.name} | R$ %.2f | Estoque: ${product.stockQuantity}".format(product.price))
+                    contentStream.showText("- ${product.name} | R$ ${CurrencyUtils.formatPlain(product.price)} | Estoque: ${formatQuantity(product.stockQuantity, product.unit)}")
                     contentStream.endText()
                     yPosition -= LINE_HEIGHT
 
@@ -249,7 +251,7 @@ class PdfReportGenerator {
                 contentStream.setFont(PDType1Font.HELVETICA, FONT_SIZE_SMALL)
                 contentStream.beginText()
                 contentStream.newLineAtOffset(MARGIN + 20, yPosition)
-                contentStream.showText("Total: R$ %.2f | Pagamento: ${sale.paymentMethod}".format(sale.total))
+                contentStream.showText("Total: R$ ${CurrencyUtils.formatPlain(sale.total)} | Pagamento: ${sale.paymentMethod}")
                 contentStream.endText()
                 yPosition -= LINE_HEIGHT * 1.5f
             }
@@ -300,7 +302,7 @@ class PdfReportGenerator {
             contentStream.setFont(PDType1Font.HELVETICA, FONT_SIZE_NORMAL)
             val stockSummary = listOf(
                 "Total de Produtos:" to totalProducts.toString(),
-                "Valor Total em Estoque:" to "R$ %.2f".format(totalStockValue),
+                "Valor Total em Estoque:" to "R$ ${CurrencyUtils.formatPlain(totalStockValue)}",
                 "Produtos com Estoque Baixo:" to lowStockProducts.size.toString()
             )
 
@@ -357,11 +359,12 @@ class PdfReportGenerator {
                 val name = if (product.name.length > 25) product.name.substring(0, 25) + "..." else product.name
                 contentStream.showText(name)
                 contentStream.newLineAtOffset(180f, 0f)
-                contentStream.showText("R$ %.2f".format(product.price))
+                contentStream.showText("R$ ${CurrencyUtils.formatPlain(product.price)}")
                 contentStream.newLineAtOffset(80f, 0f)
-                contentStream.showText("${product.stockQuantity} un")
+                // Ajustar unidade exibida
+                contentStream.showText(formatQuantity(product.stockQuantity, product.unit))
                 contentStream.newLineAtOffset(80f, 0f)
-                contentStream.showText("R$ %.2f".format(totalValue))
+                contentStream.showText("R$ ${CurrencyUtils.formatPlain(totalValue)}")
                 contentStream.endText()
                 yPosition -= LINE_HEIGHT
             }
@@ -412,10 +415,10 @@ class PdfReportGenerator {
             contentStream.setFont(PDType1Font.HELVETICA, FONT_SIZE_NORMAL)
             val salesData = listOf(
                 "Total de Vendas: ${sales.size}",
-                "Faturamento Total: R$ %.2f".format(totalRevenue),
+                "Faturamento Total: R$ ${CurrencyUtils.formatPlain(totalRevenue)}",
                 "Vendas Hoje: ${todaySales.size}",
-                "Faturamento Hoje: R$ %.2f".format(todayRevenue),
-                "Ticket Medio: R$ %.2f".format(if (sales.isNotEmpty()) totalRevenue / sales.size else 0.0)
+                "Faturamento Hoje: R$ ${CurrencyUtils.formatPlain(todayRevenue)}",
+                "Ticket Medio: R$ ${CurrencyUtils.formatPlain(if (sales.isNotEmpty()) totalRevenue / sales.size else 0.0)}"
             )
 
             salesData.forEach { line ->
@@ -442,7 +445,7 @@ class PdfReportGenerator {
             salesByPayment.entries.forEach { (method, salesList) ->
                 contentStream.beginText()
                 contentStream.newLineAtOffset(MARGIN, yPosition)
-                contentStream.showText("$method: ${salesList.size} vendas - R$ %.2f".format(salesList.sumOf { it.total }))
+                contentStream.showText("$method: ${salesList.size} vendas - R$ ${CurrencyUtils.formatPlain(salesList.sumOf { it.total })}")
                 contentStream.endText()
                 yPosition -= LINE_HEIGHT
             }
@@ -494,7 +497,7 @@ class PdfReportGenerator {
             contentStream.setFont(PDType1Font.HELVETICA, FONT_SIZE_NORMAL)
             val stockData = listOf(
                 "Total de Produtos: ${products.size}",
-                "Valor Total em Estoque: R$ %.2f".format(totalStockValue),
+                "Valor Total em Estoque: R$ ${CurrencyUtils.formatPlain(totalStockValue)}",
                 "Produtos com Estoque Baixo: ${lowStockProducts.size}"
             )
 
@@ -559,6 +562,17 @@ class PdfReportGenerator {
         return y
     }
 
+    // Formata quantidade com unidade: se unidade for 'un' mostra inteiro, caso contrário 2 casas
+    private fun formatQuantity(qty: Double, unit: String?): String {
+        val u = unit ?: "un"
+        return if (u != "un") String.format("%.2f %s", qty, u) else "${qty.toInt()} $u"
+    }
+
+    // Formata quantidade simples (sem unidade) para somas ou agregações
+    private fun formatQtySimple(qty: Double): String {
+        return if (qty % 1.0 == 0.0) qty.toInt().toString() else String.format("%.2f", qty)
+    }
+
     private fun drawFooter(stream: PDPageContentStream, page: PDPage) {
         val y = MARGIN - 20
 
@@ -574,4 +588,3 @@ class PdfReportGenerator {
         stream.endText()
     }
 }
-

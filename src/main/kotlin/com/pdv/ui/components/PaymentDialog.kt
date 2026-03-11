@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pdv.data.PaymentMethod
+import com.pdv.util.CurrencyUtils
 import kotlin.math.max
 
 @Composable
@@ -29,7 +30,8 @@ fun PaymentDialog(
     var selectedMethod by remember { mutableStateOf(PaymentMethod.DINHEIRO) }
     var receivedText by remember { mutableStateOf("") }
 
-    val receivedAmount = receivedText.replace(",", ".").toDoubleOrNull() ?: 0.0
+    // Use CurrencyUtils.parse para converter entrada para Double
+    val receivedAmount = CurrencyUtils.parse(receivedText)
     val change = max(0.0, receivedAmount - total)
     val canConfirm = when (selectedMethod) {
         PaymentMethod.DINHEIRO -> receivedAmount >= total
@@ -46,7 +48,7 @@ fun PaymentDialog(
             }
         },
         text = {
-            Column(modifier = Modifier.width(450.dp)) {
+            Column(modifier = Modifier.widthIn(max = 520.dp)) {
                 // Total a pagar
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -59,7 +61,7 @@ fun PaymentDialog(
                     ) {
                         Text("TOTAL A PAGAR", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
                         Text(
-                            "R$ %.2f".format(total),
+                            CurrencyUtils.format(total),
                             color = Color.White,
                             fontSize = 36.sp,
                             fontWeight = FontWeight.Bold
@@ -93,18 +95,23 @@ fun PaymentDialog(
                 if (selectedMethod == PaymentMethod.DINHEIRO) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        backgroundColor = Color(0xFFF5F5F5),
+                        backgroundColor = MaterialTheme.colors.surface,
                         elevation = 0.dp
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text("Valor Recebido", fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(8.dp))
+
+                            // Calcular uma string de exibição a partir do texto cru
+                            val displayReceived = if (receivedText.isBlank()) "" else CurrencyUtils.formatPlain(CurrencyUtils.parse(receivedText))
+
                             OutlinedTextField(
-                                value = receivedText,
+                                value = displayReceived,
                                 onValueChange = { v ->
-                                    receivedText = v.filter { it.isDigit() || it == '.' || it == ',' }
+                                    // Guardar entrada crua; aceitar apenas dígitos, '.' e ','
+                                    receivedText = v.filter { ch -> ch.isDigit() || ch == ',' || ch == '.' }
                                 },
-                                placeholder = { Text("0.00") },
+                                placeholder = { Text("0,00") },
                                 modifier = Modifier.fillMaxWidth(),
                                 leadingIcon = {
                                     Text("R$", fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -124,7 +131,7 @@ fun PaymentDialog(
                             ) {
                                 listOf(total, 20.0, 50.0, 100.0, 200.0).forEach { value ->
                                     OutlinedButton(
-                                        onClick = { receivedText = "%.2f".format(value) },
+                                        onClick = { receivedText = "%.2f".format(value).replace('.', ',') },
                                         modifier = Modifier.weight(1f),
                                         contentPadding = PaddingValues(4.dp)
                                     ) {
@@ -146,18 +153,18 @@ fun PaymentDialog(
                             ) {
                                 Text("TROCO:", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                                 Text(
-                                    "R$ %.2f".format(change),
+                                    CurrencyUtils.format(change),
                                     fontSize = 24.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (change > 0) Color(0xFF4CAF50) else MaterialTheme.colors.primary
+                                    color = if (change > 0) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface.copy(alpha = 0.9f)
                                 )
                             }
 
                             if (receivedAmount > 0 && receivedAmount < total) {
                                 Spacer(Modifier.height(8.dp))
                                 Text(
-                                    "⚠ Valor insuficiente! Faltam R$ %.2f".format(total - receivedAmount),
-                                    color = Color(0xFFE53935),
+                                    "⚠ Valor insuficiente! Faltam ${CurrencyUtils.format(total - receivedAmount)}",
+                                    color = MaterialTheme.colors.error,
                                     fontSize = 14.sp
                                 )
                             }
@@ -167,14 +174,14 @@ fun PaymentDialog(
                     // Confirmação para outros métodos
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        backgroundColor = Color(0xFFE8F5E9),
+                        backgroundColor = MaterialTheme.colors.surface,
                         elevation = 0.dp
                     ) {
                         Row(
                             modifier = Modifier.padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(24.dp))
+                            Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colors.primary, modifier = Modifier.size(24.dp))
                             Spacer(Modifier.width(12.dp))
                             Text(
                                 "Pagamento via ${selectedMethod.displayName}",
@@ -188,12 +195,12 @@ fun PaymentDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val received = if (selectedMethod == PaymentMethod.DINHEIRO) receivedAmount else null
-                    onConfirm(selectedMethod.name, received)
+                    val received = if (selectedMethod == PaymentMethod.DINHEIRO) CurrencyUtils.parse(receivedText) else null
+                    onConfirm(selectedMethod.name, if (received == 0.0) null else received)
                 },
                 enabled = canConfirm,
                 colors = ButtonDefaults.buttonColors(
-                    backgroundColor = Color(0xFF4CAF50)
+                    backgroundColor = MaterialTheme.colors.primary
                 ),
                 modifier = Modifier.height(48.dp)
             ) {

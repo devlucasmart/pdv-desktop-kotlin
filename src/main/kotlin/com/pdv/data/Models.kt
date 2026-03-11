@@ -8,18 +8,19 @@ data class Product(
     val sku: String,
     val name: String,
     val price: Double,
-    val stockQuantity: Int = 0,
+    val stockQuantity: Double = 0.0,
+    val unit: String = "un",
     val category: String? = null,
     val active: Boolean = true
 ) {
-    fun isLowStock(threshold: Int = 10): Boolean = stockQuantity < threshold
+    fun isLowStock(threshold: Double = 10.0): Boolean = stockQuantity < threshold
 
     fun formattedPrice(): String = "R$ %.2f".format(price)
 }
 
 data class SaleItem(
     val product: Product,
-    var quantity: Int = 1,
+    var quantity: Double = 1.0,
     val discount: Double = 0.0
 ) {
     val unitPrice: Double
@@ -32,52 +33,36 @@ data class SaleItem(
         get() = totalWithoutDiscount - discount
 
     fun incrementQuantity() {
-        quantity++
+        quantity += 1.0
     }
 
     fun decrementQuantity() {
-        if (quantity > 1) quantity--
+        if (quantity > 0.0) quantity -= 1.0
     }
 }
 
 data class Sale(
     val id: Long = 0,
     val dateTime: String = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
-    val items: List<SaleItem>,
+    val items: List<SaleItem> = emptyList(),
     val discount: Double = 0.0,
     val paymentMethod: String? = null,
     val status: String = "COMPLETED",
     val operatorName: String? = null,
-    // Campos para valores carregados do banco (quando não temos itens)
-    val _total: Double? = null,
-    val _subtotal: Double? = null
+    private val _total: Double = 0.0,
+    private val _subtotal: Double = 0.0
 ) {
-    val subtotal: Double
-        get() = _subtotal ?: items.sumOf { it.totalWithoutDiscount }
-
-    val totalDiscount: Double
-        get() = items.sumOf { it.discount } + discount
-
     val total: Double
-        get() = _total ?: (subtotal - totalDiscount)
+        get() = if (_total > 0.0) _total else items.sumOf { it.total } - discount
 
-    fun getFormattedDateTime(): String {
-        return try {
-            val dt = LocalDateTime.parse(dateTime)
-            dt.format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"))
-        } catch (e: Exception) {
-            dateTime
-        }
-    }
+    val subtotal: Double
+        get() = if (_subtotal > 0.0) _subtotal else items.sumOf { it.totalWithoutDiscount }
 
-    fun formattedTotal(): String = "R$ %.2f".format(total)
+    // Compatibilidade: alias para APIs existentes
+    val totalDiscount: Double
+        get() = discount
+
+    // Expose raw backing values for serialization if needed
+    fun rawTotal(): Double = _total
+    fun rawSubtotal(): Double = _subtotal
 }
-
-enum class PaymentMethod(val displayName: String) {
-    DINHEIRO("Dinheiro"),
-    CARTAO_DEBITO("Cartão de Débito"),
-    CARTAO_CREDITO("Cartão de Crédito"),
-    PIX("PIX"),
-    OUTROS("Outros")
-}
-

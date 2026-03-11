@@ -13,7 +13,8 @@ class SmokeTest {
         assertTrue(products.isNotEmpty(), "Deve haver produtos de exemplo")
 
         val prod = products.first()
-        val item = SaleItem(product = prod, quantity = 1)
+        val qty: Double = 1.0
+        val item = SaleItem(product = prod, quantity = qty)
         val sale = Sale(items = listOf(item), discount = 0.0, paymentMethod = "DINHEIRO", operatorName = "Test")
 
         val saleDao = SaleDao()
@@ -25,4 +26,3 @@ class SmokeTest {
         Database.close()
     }
 }
-

@@ -3,6 +3,7 @@ package com.pdv.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -18,6 +19,7 @@ import com.pdv.data.Product
 import com.pdv.data.ProductDao
 import com.pdv.data.UserSession
 import com.pdv.data.Permission
+import com.pdv.util.CurrencyUtils
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -29,6 +31,7 @@ fun ProductsScreen(snackbarHostState: SnackbarHostState) {
     val productDao = remember { ProductDao() }
     var products by remember { mutableStateOf(productDao.findAll()) }
     var showDialog by remember { mutableStateOf(false) }
+    var editingProduct by remember { mutableStateOf<Product?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
@@ -60,7 +63,7 @@ fun ProductsScreen(snackbarHostState: SnackbarHostState) {
                 )
                 if (canAddProducts) {
                     Button(
-                        onClick = { showDialog = true },
+                        onClick = { editingProduct = null; showDialog = true },
                         colors = ButtonDefaults.buttonColors(
                             backgroundColor = MaterialTheme.colors.primary
                         )
@@ -154,10 +157,8 @@ fun ProductsScreen(snackbarHostState: SnackbarHostState) {
                                 canEdit = canEditProducts,
                                 canDelete = canDeleteProducts,
                                 onEdit = {
-                                    // TODO: implementar edição
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("Edição em desenvolvimento")
-                                    }
+                                    editingProduct = product
+                                    showDialog = true
                                 },
                                 onDelete = {
                                     productDao.delete(product.sku)
@@ -180,13 +181,35 @@ fun ProductsScreen(snackbarHostState: SnackbarHostState) {
 
         if (showDialog) {
             ProductDialog(
+                existing = editingProduct,
                 onDismiss = { showDialog = false },
-                onSave = { product ->
-                    productDao.save(product)
-                    products = productDao.findAll()
-                    showDialog = false
+                onSave = { newProduct ->
                     scope.launch {
-                        snackbarHostState.showSnackbar("Produto adicionado com sucesso!")
+                        // se estamos editando
+                        if (editingProduct != null) {
+                            val ok = productDao.update(newProduct)
+                            if (ok) {
+                                snackbarHostState.showSnackbar("Produto atualizado com sucesso")
+                            } else {
+                                snackbarHostState.showSnackbar("Erro ao atualizar produto")
+                            }
+                        } else {
+                            // criação: validar SKU único
+                            val existing = productDao.findBySku(newProduct.sku)
+                            if (existing != null) {
+                                snackbarHostState.showSnackbar("SKU já existe: use outro código")
+                                return@launch
+                            }
+                            val id = productDao.save(newProduct)
+                            if (id > 0) {
+                                snackbarHostState.showSnackbar("Produto criado com sucesso")
+                            } else {
+                                snackbarHostState.showSnackbar("Erro ao salvar produto")
+                            }
+                        }
+                        products = productDao.findAll()
+                        showDialog = false
+                        editingProduct = null
                     }
                 }
             )
@@ -226,8 +249,9 @@ fun ProductCard(
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Estoque: ", fontSize = 14.sp, color = Color.Gray)
+                    val stockText = if (product.unit != "un") String.format("%.2f %s", product.stockQuantity, product.unit) else "${product.stockQuantity.toInt()} ${product.unit}."
                     Text(
-                        "${product.stockQuantity} un.",
+                        stockText,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (product.isLowStock()) Color.Red else Color(0xFF4CAF50)
@@ -285,81 +309,267 @@ fun ProductCard(
 }
 
 @Composable
-fun ProductDialog(onDismiss: () -> Unit, onSave: (Product) -> Unit) {
+fun ProductDialog(existing: Product? = null, onDismiss: () -> Unit, onSave: (Product) -> Unit) {
     var sku by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
-    var price by remember { mutableStateOf("") }
-    var stock by remember { mutableStateOf("") }
+    // armazenar entrada bruta para melhor máscara
+    var priceRaw by remember { mutableStateOf("") }
+    var stockRaw by remember { mutableStateOf("") }
+    var unit by remember { mutableStateOf("un") }
     var category by remember { mutableStateOf("") }
+    val units = listOf("un", "kg", "g", "L", "ml", "cx")
+    var unitDropdownExpanded by remember { mutableStateOf(false) }
+
+    // validation state
+    var skuError by remember { mutableStateOf("") }
+    var nameError by remember { mutableStateOf("") }
+    var priceError by remember { mutableStateOf("") }
+
+    val productDao = remember { ProductDao() }
+
+    // Inicializar estados com valores existentes (modo edição)
+    LaunchedEffect(existing) {
+        existing?.let { p ->
+            sku = p.sku
+            name = p.name
+            // store formatted strings so display shows proper separators
+            priceRaw = CurrencyUtils.formatPlain(p.price)
+            stockRaw = CurrencyUtils.formatPlain(p.stockQuantity)
+            unit = p.unit
+            category = p.category ?: ""
+        } ?: run {
+            // ensure defaults when creating
+            sku = ""
+            name = ""
+            priceRaw = ""
+            stockRaw = ""
+            unit = "un"
+            category = ""
+        }
+        skuError = ""
+        nameError = ""
+        priceError = ""
+    }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Novo Produto") },
-        text = {
-            Column(modifier = Modifier.width(400.dp)) {
+         onDismissRequest = onDismiss,
+         title = { Text("Novo Produto") },
+         text = {
+             Column(modifier = Modifier.width(420.dp)) {
                 OutlinedTextField(
                     value = sku,
-                    onValueChange = { sku = it },
+                    onValueChange = { if (existing == null) { sku = it; skuError = "" } },
                     label = { Text("SKU *") },
                     placeholder = { Text("Código único") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    readOnly = existing != null,
+                    isError = skuError.isNotBlank()
                 )
-                Spacer(Modifier.height(8.dp))
+                if (skuError.isNotBlank()) {
+                    Text(skuError, color = MaterialTheme.colors.error, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
+                }
+                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = { name = it; nameError = "" },
                     label = { Text("Nome *") },
                     placeholder = { Text("Nome do produto") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = price,
-                    onValueChange = { price = it.filter { c -> c.isDigit() || c == '.' } },
-                    label = { Text("Preço *") },
-                    placeholder = { Text("0.00") },
                     modifier = Modifier.fillMaxWidth(),
-                    leadingIcon = { Text("R$") }
+                    isError = nameError.isNotBlank()
                 )
-                Spacer(Modifier.height(8.dp))
+                if (nameError.isNotBlank()) {
+                    Text(nameError, color = MaterialTheme.colors.error, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
+                }
+                 Spacer(Modifier.height(8.dp))
+
+                // Preço com máscara enquanto digita
+                val displayPrice = if (priceRaw.isBlank()) "" else CurrencyUtils.formatFromInput(priceRaw)
                 OutlinedTextField(
-                    value = stock,
-                    onValueChange = { stock = it.filter { c -> c.isDigit() } },
+                    value = displayPrice,
+                    onValueChange = { v -> priceRaw = v.filter { c -> c.isDigit() || c == ',' || c == '.' }; priceError = "" },
+                    label = { Text("Preço *") },
+                    placeholder = { Text("0,00") },
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = { Text("R$") },
+                    singleLine = true,
+                    isError = priceError.isNotBlank()
+                )
+                if (priceError.isNotBlank()) {
+                    Text(priceError, color = MaterialTheme.colors.error, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
+                }
+                Spacer(Modifier.height(8.dp))
+
+                // Estoque (mascara simples usando mesma utilidade)
+                val displayStock = if (stockRaw.isBlank()) "" else CurrencyUtils.formatFromInput(stockRaw)
+                OutlinedTextField(
+                    value = displayStock,
+                    onValueChange = { v -> stockRaw = v.filter { c -> c.isDigit() || c == ',' || c == '.' } },
                     label = { Text("Estoque") },
                     placeholder = { Text("0") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = { Text("Qtd") },
+                    singleLine = true
                 )
                 Spacer(Modifier.height(8.dp))
+
+                // Select de unidade estilizado
+                val unitLabels = mapOf(
+                    "un" to "Unidade (un)",
+                    "kg" to "Quilograma (kg)",
+                    "g" to "Grama (g)",
+                    "L" to "Litro (L)",
+                    "ml" to "Mililitro (ml)",
+                    "cx" to "Caixa (cx)"
+                )
+
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Unidade",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+                    )
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().clickable { unitDropdownExpanded = !unitDropdownExpanded },
+                            shape = MaterialTheme.shapes.small,
+                            border = ButtonDefaults.outlinedBorder,
+                            color = MaterialTheme.colors.surface
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp)
+                                    .padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Straighten,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colors.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(
+                                        unitLabels[unit] ?: unit,
+                                        fontSize = 16.sp,
+                                        color = MaterialTheme.colors.onSurface
+                                    )
+                                }
+                                Icon(
+                                    if (unitDropdownExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                    contentDescription = "Selecionar",
+                                    tint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = unitDropdownExpanded,
+                            onDismissRequest = { unitDropdownExpanded = false },
+                            modifier = Modifier.width(380.dp)
+                        ) {
+                            units.forEach { u ->
+                                DropdownMenuItem(
+                                    onClick = {
+                                        unit = u
+                                        unitDropdownExpanded = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(
+                                            if (u == unit) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                            contentDescription = null,
+                                            tint = if (u == unit) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface.copy(alpha = 0.3f),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(Modifier.width(12.dp))
+                                        Column {
+                                            Text(
+                                                unitLabels[u] ?: u,
+                                                fontWeight = if (u == unit) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (u == unit) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface
+                                            )
+                                        }
+                                    }
+                                }
+                                if (u != units.last()) {
+                                    Divider(color = MaterialTheme.colors.onSurface.copy(alpha = 0.08f))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Categoria (opcional)
                 OutlinedTextField(
                     value = category,
                     onValueChange = { category = it },
                     label = { Text("Categoria") },
-                    placeholder = { Text("Ex: Bebidas, Alimentos...") },
+                    placeholder = { Text("Categoria do produto") },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-        },
-        confirmButton = {
+         },
+         confirmButton = {
             Button(
                 onClick = {
+                    // validations
+                    var ok = true
+                    if (sku.trim().isEmpty()) {
+                        skuError = "SKU obrigatório"
+                        ok = false
+                    }
+                    if (name.trim().isEmpty()) {
+                        nameError = "Nome obrigatório"
+                        ok = false
+                    }
+                    val priceVal = CurrencyUtils.parse(priceRaw)
+                    if (priceVal <= 0.0) {
+                        priceError = "Preço inválido"
+                        ok = false
+                    }
+
+                    // if creating, check SKU uniqueness
+                    if (existing == null && ok) {
+                        val exists = productDao.findBySku(sku.trim())
+                        if (exists != null) {
+                            skuError = "SKU já cadastrado"
+                            ok = false
+                        }
+                    }
+
+                    if (!ok) return@Button
+
+                    val price = CurrencyUtils.parse(priceRaw)
+                    val stock = CurrencyUtils.parse(stockRaw)
                     val product = Product(
                         sku = sku.trim(),
                         name = name.trim(),
-                        price = price.toDoubleOrNull() ?: 0.0,
-                        stockQuantity = stock.toIntOrNull() ?: 0,
+                        price = price,
+                        stockQuantity = stock,
+                        unit = unit.ifBlank { "un" },
                         category = category.trim().ifEmpty { null }
                     )
                     onSave(product)
                 },
-                enabled = sku.isNotBlank() && name.isNotBlank() && price.toDoubleOrNull() != null
+                enabled = true
             ) {
-                Text("Salvar")
+                Text(if (existing == null) "Salvar" else "Atualizar")
             }
-        },
-        dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
-                Text("Cancelar")
-            }
-        }
-    )
+         },
+         dismissButton = {
+             OutlinedButton(onClick = onDismiss) {
+                 Text("Cancelar")
+             }
+         }
+     )
 }

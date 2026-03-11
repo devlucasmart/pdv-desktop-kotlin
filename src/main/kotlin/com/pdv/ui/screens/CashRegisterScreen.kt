@@ -24,6 +24,9 @@ import androidx.compose.ui.unit.sp
 import com.pdv.data.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
+import java.util.Locale
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -39,6 +42,41 @@ fun CashRegisterScreen(snackbarHostState: SnackbarHostState) {
     var showWithdrawalDialog by remember { mutableStateOf(false) }
     var showDepositDialog by remember { mutableStateOf(false) }
     var refreshTrigger by remember { mutableStateOf(0) }
+
+    // utilitário para sanear entrada de moeda (retorna string com '.' como separador decimal, sem separadores de milhar)
+    fun sanitizeCurrencyInputRaw(input: String): String {
+        val cleaned = input.filter { it.isDigit() || it == '.' || it == ',' }
+        if (cleaned.isBlank()) return ""
+        val dot = cleaned.replace(',', '.')
+        val parts = dot.split('.')
+        return if (parts.size <= 1) {
+            dot
+        } else {
+            // junta tudo depois do primeiro ponto (evita pontos adicionais)
+            parts[0] + "." + parts.drop(1).joinToString("")
+        }
+    }
+
+    // formata para exibição com duas casas e separador de milhar no padrão pt-BR: 1.234,56
+    fun formatCurrencyDisplayFromRaw(raw: String): String {
+        val d = raw.toDoubleOrNull() ?: return ""
+        val symbols = DecimalFormatSymbols(Locale("pt", "BR")).apply {
+            decimalSeparator = ','
+            groupingSeparator = '.'
+        }
+        val df = DecimalFormat("#,##0.00", symbols)
+        return df.format(d)
+    }
+
+    // parseia string exibida (pode conter '.' como separador de milhar e ',' decimal) para Double
+    fun parseDisplayCurrency(display: String): Double {
+        if (display.isBlank()) return 0.0
+        // remover espaços
+        val trimmed = display.trim()
+        // remover agrupadores de milhares (pontos) e substituir vírgula por ponto
+        val normalized = trimmed.replace(".", "").replace(',', '.')
+        return normalized.toDoubleOrNull() ?: 0.0
+    }
 
     // Função para atualizar dados
     fun refreshData() {
@@ -373,11 +411,12 @@ fun CashRegisterScreen(snackbarHostState: SnackbarHostState) {
                     OutlinedTextField(
                         value = initialText,
                         onValueChange = { v ->
-                            initialText = v.filter { it.isDigit() || it == '.' || it == ',' }
-                                .replace(",", ".")
+                            // sanitiza e formata imediatamente para exibição com 2 casas
+                            val raw = sanitizeCurrencyInputRaw(v)
+                            initialText = if (raw.isBlank()) "" else formatCurrencyDisplayFromRaw(raw)
                         },
                         label = { Text("Valor inicial (R$)") },
-                        placeholder = { Text("0.00") },
+                        placeholder = { Text("0,00") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         leadingIcon = { Text("R$", fontWeight = FontWeight.Bold) }
@@ -388,7 +427,7 @@ fun CashRegisterScreen(snackbarHostState: SnackbarHostState) {
                 Button(
                     onClick = {
                         isLoading = true
-                        val value = initialText.toDoubleOrNull() ?: 0.0
+                        val value = parseDisplayCurrency(initialText)
                         val user = UserSession.getCurrentUser()
                         val id = cashDao.openSession(user?.fullName ?: "Desconhecido", value)
                         if (id > 0) {
@@ -426,7 +465,7 @@ fun CashRegisterScreen(snackbarHostState: SnackbarHostState) {
         var isLoading by remember { mutableStateOf(false) }
 
         val expectedAmount = saldoAtual
-        val countedAmount = closingText.replace(",", ".").toDoubleOrNull() ?: 0.0
+        val countedAmount = parseDisplayCurrency(closingText)
         val difference = countedAmount - expectedAmount
 
         AlertDialog(
@@ -479,10 +518,11 @@ fun CashRegisterScreen(snackbarHostState: SnackbarHostState) {
                     OutlinedTextField(
                         value = closingText,
                         onValueChange = { v ->
-                            closingText = v.filter { it.isDigit() || it == '.' || it == ',' }
+                            val raw = sanitizeCurrencyInputRaw(v)
+                            closingText = if (raw.isBlank()) "" else formatCurrencyDisplayFromRaw(raw)
                         },
                         label = { Text("Valor contado (R$)") },
-                        placeholder = { Text("0.00") },
+                        placeholder = { Text("0,00") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         leadingIcon = { Text("R$", fontWeight = FontWeight.Bold) }
@@ -518,7 +558,7 @@ fun CashRegisterScreen(snackbarHostState: SnackbarHostState) {
                 Button(
                     onClick = {
                         isLoading = true
-                        val counted = closingText.replace(",", ".").toDoubleOrNull() ?: 0.0
+                        val counted = parseDisplayCurrency(closingText)
                         val closed = cashDao.closeSession(session.id, counted)
                         if (closed) {
                             refreshTrigger++
@@ -554,7 +594,7 @@ fun CashRegisterScreen(snackbarHostState: SnackbarHostState) {
         var description by remember { mutableStateOf("") }
         var isLoading by remember { mutableStateOf(false) }
 
-        val amount = amountText.replace(",", ".").toDoubleOrNull() ?: 0.0
+        val amount = parseDisplayCurrency(amountText)
 
         AlertDialog(
             onDismissRequest = { if (!isLoading) showWithdrawalDialog = false },
@@ -576,10 +616,11 @@ fun CashRegisterScreen(snackbarHostState: SnackbarHostState) {
                     OutlinedTextField(
                         value = amountText,
                         onValueChange = { v ->
-                            amountText = v.filter { it.isDigit() || it == '.' || it == ',' }
+                            val raw = sanitizeCurrencyInputRaw(v)
+                            amountText = if (raw.isBlank()) "" else formatCurrencyDisplayFromRaw(raw)
                         },
                         label = { Text("Valor da sangria (R$)") },
-                        placeholder = { Text("0.00") },
+                        placeholder = { Text("0,00") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         leadingIcon = { Text("R$", fontWeight = FontWeight.Bold) },
@@ -652,7 +693,7 @@ fun CashRegisterScreen(snackbarHostState: SnackbarHostState) {
         var description by remember { mutableStateOf("") }
         var isLoading by remember { mutableStateOf(false) }
 
-        val amount = amountText.replace(",", ".").toDoubleOrNull() ?: 0.0
+        val amount = parseDisplayCurrency(amountText)
 
         AlertDialog(
             onDismissRequest = { if (!isLoading) showDepositDialog = false },
@@ -674,10 +715,11 @@ fun CashRegisterScreen(snackbarHostState: SnackbarHostState) {
                     OutlinedTextField(
                         value = amountText,
                         onValueChange = { v ->
-                            amountText = v.filter { it.isDigit() || it == '.' || it == ',' }
+                            val raw = sanitizeCurrencyInputRaw(v)
+                            amountText = if (raw.isBlank()) "" else formatCurrencyDisplayFromRaw(raw)
                         },
                         label = { Text("Valor do reforço (R$)") },
-                        placeholder = { Text("0.00") },
+                        placeholder = { Text("0,00") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         leadingIcon = { Text("R$", fontWeight = FontWeight.Bold) }

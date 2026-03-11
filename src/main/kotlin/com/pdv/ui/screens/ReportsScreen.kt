@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
@@ -21,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pdv.data.*
 import com.pdv.reports.PdfReportGenerator
+import com.pdv.util.CurrencyUtils
 import kotlinx.coroutines.launch
 import java.awt.Desktop
 import java.io.File
@@ -77,7 +79,7 @@ fun ReportsScreen() {
 
         val products = productDao.findAll()
         totalProducts = products.size
-        lowStockProducts = productDao.getLowStockProducts(10)
+        lowStockProducts = productDao.getLowStockProducts(10.0)
         lowStockCount = lowStockProducts.size
 
         // Dados do período selecionado
@@ -145,7 +147,7 @@ fun ReportsScreen() {
                         Text(
                             "Última atualização: ${LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))}",
                             fontSize = 12.sp,
-                            color = Color.Gray
+                            color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f)
                         )
                     }
 
@@ -158,7 +160,7 @@ fun ReportsScreen() {
 
                         Button(
                             onClick = { showExportDialog = true },
-                            colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFFD32F2F))
+                            colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.error)
                         ) {
                             Icon(Icons.Default.PictureAsPdf, "Exportar PDF", tint = Color.White, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
@@ -174,7 +176,7 @@ fun ReportsScreen() {
                     modifier = Modifier.fillMaxWidth(),
                     elevation = 2.dp,
                     shape = RoundedCornerShape(8.dp),
-                    backgroundColor = Color(0xFFF5F5F5)
+                    backgroundColor = MaterialTheme.colors.surface
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("📅 Filtrar por Período", fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -233,28 +235,28 @@ fun ReportsScreen() {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     StatCard(
                         title = "Faturamento do Período",
-                        value = "R$ %.2f".format(periodTotal),
+                        value = CurrencyUtils.format(periodTotal),
                         subtitle = "$periodCount venda(s)",
                         icon = Icons.Default.AttachMoney,
-                        color = Color(0xFF4CAF50),
+                        color = MaterialTheme.colors.primary,
                         modifier = Modifier.weight(1f)
                     )
 
                     StatCard(
                         title = "Ticket Médio",
-                        value = "R$ %.2f".format(if (periodCount > 0) periodTotal / periodCount else 0.0),
+                        value = CurrencyUtils.format(if (periodCount > 0) periodTotal / periodCount else 0.0),
                         subtitle = "No período selecionado",
                         icon = Icons.Default.Receipt,
-                        color = Color(0xFF2196F3),
+                        color = MaterialTheme.colors.secondary,
                         modifier = Modifier.weight(1f)
                     )
 
                     StatCard(
                         title = "Faturamento Total",
-                        value = "R$ %.2f".format(totalSales),
+                        value = CurrencyUtils.format(totalSales),
                         subtitle = "$salesCount venda(s) total",
                         icon = Icons.Default.TrendingUp,
-                        color = Color(0xFFFF9800),
+                        color = MaterialTheme.colors.onSurface,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -266,94 +268,107 @@ fun ReportsScreen() {
                     "📋 Vendas do Período (${salesList.size})",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1976D2)
+                    color = MaterialTheme.colors.primary
                 )
                 Spacer(Modifier.height(12.dp))
 
+                val salesLazyState = rememberLazyListState()
+
                 Card(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 420.dp),
                     elevation = 2.dp,
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    if (salesList.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.ReceiptLong, null, modifier = Modifier.size(48.dp), tint = Color.Gray)
-                                Spacer(Modifier.height(8.dp))
-                                Text("Nenhuma venda no período selecionado", color = Color.Gray)
-                            }
-                        }
-                    } else {
-                        LazyColumn(modifier = Modifier.padding(8.dp)) {
-                            item {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(Color(0xFF1976D2))
-                                        .padding(horizontal = 12.dp, vertical = 10.dp)
-                                ) {
-                                    Text("ID", fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(60.dp))
-                                    Text("Data/Hora", fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(120.dp))
-                                    Text("Operador", fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.weight(1f))
-                                    Text("Pagamento", fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(100.dp))
-                                    Text("Total", fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(100.dp), textAlign = TextAlign.End)
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        if (salesList.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.ReceiptLong, null, modifier = Modifier.size(48.dp), tint = Color.Gray)
+                                    Spacer(Modifier.height(8.dp))
+                                    Text("Nenhuma venda no período selecionado", color = Color.Gray)
                                 }
                             }
-                            items(salesList) { sale ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("#${sale.id}", modifier = Modifier.width(60.dp), color = Color.Gray, fontWeight = FontWeight.Bold)
-                                    Text(
-                                        try {
-                                            LocalDateTime.parse(sale.dateTime).format(DateTimeFormatter.ofPattern("dd/MM HH:mm"))
-                                        } catch (e: Exception) { sale.dateTime.take(16) },
-                                        modifier = Modifier.width(120.dp),
-                                        fontSize = 13.sp
-                                    )
-                                    Text(sale.operatorName ?: "-", modifier = Modifier.weight(1f), fontSize = 13.sp)
-                                    Text(
-                                        when (sale.paymentMethod) {
-                                            "DINHEIRO" -> "💵 Dinheiro"
-                                            "PIX" -> "📱 PIX"
-                                            "CARTAO_CREDITO" -> "💳 Crédito"
-                                            "CARTAO_DEBITO" -> "💳 Débito"
-                                            else -> sale.paymentMethod ?: "-"
-                                        },
-                                        modifier = Modifier.width(100.dp),
-                                        fontSize = 12.sp
-                                    )
-                                    Text(
-                                        "R$ %.2f".format(sale.total),
-                                        modifier = Modifier.width(100.dp),
-                                        textAlign = TextAlign.End,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF4CAF50),
-                                        fontSize = 14.sp
-                                    )
+                        } else {
+                            LazyColumn(state = salesLazyState, modifier = Modifier.padding(8.dp)) {
+                                item {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(MaterialTheme.colors.primary)
+                                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                                    ) {
+                                        Text("ID", fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(60.dp))
+                                        Text("Data/Hora", fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(120.dp))
+                                        Text("Operador", fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.weight(1f))
+                                        Text("Pagamento", fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(100.dp))
+                                        Text("Total", fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(100.dp), textAlign = TextAlign.End)
+                                    }
                                 }
-                                Divider(color = Color(0xFFEEEEEE))
+                                items(salesList) { sale ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("#${sale.id}", modifier = Modifier.width(60.dp), color = MaterialTheme.colors.onSurface.copy(alpha = 0.8f), fontWeight = FontWeight.Bold)
+                                        Text(
+                                            try {
+                                                LocalDateTime.parse(sale.dateTime).format(DateTimeFormatter.ofPattern("dd/MM HH:mm"))
+                                            } catch (e: Exception) { sale.dateTime.take(16) },
+                                            modifier = Modifier.width(120.dp),
+                                            fontSize = 13.sp
+                                        )
+                                        Text(sale.operatorName ?: "-", modifier = Modifier.weight(1f), fontSize = 13.sp)
+                                        Text(
+                                            when (sale.paymentMethod) {
+                                                "DINHEIRO" -> "💵 Dinheiro"
+                                                "PIX" -> "📱 PIX"
+                                                "CARTAO_CREDITO" -> "💳 Crédito"
+                                                "CARTAO_DEBITO" -> "💳 Débito"
+                                                else -> sale.paymentMethod ?: "-"
+                                            },
+                                            modifier = Modifier.width(100.dp),
+                                            fontSize = 12.sp
+                                        )
+                                        Text(
+                                            CurrencyUtils.format(sale.total),
+                                            modifier = Modifier.width(100.dp),
+                                            textAlign = TextAlign.End,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colors.primary,
+                                            fontSize = 14.sp
+                                        )
+
+                                    }
+                                    Divider(color = MaterialTheme.colors.onSurface.copy(alpha = 0.06f))
+                                }
+                                // Rodapé com total
+                                item {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(MaterialTheme.colors.background.copy(alpha = 0.6f))
+                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("TOTAL DO PERÍODO", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text(
+                                            CurrencyUtils.format(salesList.sumOf { it.total }),
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colors.primary,
+                                            fontSize = 16.sp
+                                        )
+                                    }
+                                }
                             }
-                            // Rodapé com total
-                            item {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(Color(0xFFE3F2FD))
-                                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("TOTAL DO PERÍODO", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                    Text(
-                                        "R$ %.2f".format(salesList.sumOf { it.total }),
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF1976D2),
-                                        fontSize = 16.sp
-                                    )
-                                }
+
+                            // Scrollbar para a lista de vendas
+                            if (salesList.size > 6) {
+                                VerticalScrollbar(
+                                    adapter = rememberScrollbarAdapter(salesLazyState),
+                                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(8.dp)
+                                )
                             }
                         }
                     }
@@ -375,11 +390,11 @@ fun ReportsScreen() {
                     Spacer(Modifier.height(12.dp))
 
                     QuickStatRow("Vendas Hoje", "$salesCountToday")
-                    QuickStatRow("Faturamento Hoje", "R$ %.2f".format(salesToday))
+                    QuickStatRow("Faturamento Hoje", CurrencyUtils.format(salesToday))
                     Divider(modifier = Modifier.padding(vertical = 8.dp))
                     QuickStatRow("Total de Vendas", "$salesCount")
-                    QuickStatRow("Faturamento Total", "R$ %.2f".format(totalSales))
-                    QuickStatRow("Ticket Médio", "R$ %.2f".format(averageTicket))
+                    QuickStatRow("Faturamento Total", CurrencyUtils.format(totalSales))
+                    QuickStatRow("Ticket Médio", CurrencyUtils.format(averageTicket))
                     QuickStatRow("Produtos Ativos", "$totalProducts")
 
                     Spacer(Modifier.height(16.dp))
@@ -393,16 +408,16 @@ fun ReportsScreen() {
                     if (lowStockProducts.isEmpty()) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            backgroundColor = Color(0xFFE8F5E9),
+                            backgroundColor = MaterialTheme.colors.surface,
                             elevation = 0.dp
                         ) {
                             Row(
                                 modifier = Modifier.padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50))
+                                Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colors.primary)
                                 Spacer(Modifier.width(8.dp))
-                                Text("Estoque OK!", color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
+                                Text("Estoque OK!", color = MaterialTheme.colors.primary, fontWeight = FontWeight.Bold)
                             }
                         }
                     } else {
@@ -410,7 +425,7 @@ fun ReportsScreen() {
                             items(lowStockProducts.take(5)) { product ->
                                 Card(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                    backgroundColor = if (product.stockQuantity <= 5) Color(0xFFFFEBEE) else Color(0xFFFFF3E0),
+                                    backgroundColor = if (product.stockQuantity <= 5) MaterialTheme.colors.error.copy(alpha = 0.08f) else MaterialTheme.colors.primary.copy(alpha = 0.04f),
                                     elevation = 0.dp
                                 ) {
                                     Row(
@@ -419,13 +434,14 @@ fun ReportsScreen() {
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(product.name, fontWeight = FontWeight.Medium, fontSize = 12.sp, maxLines = 1)
-                                            Text("SKU: ${product.sku}", fontSize = 10.sp, color = Color.Gray)
+                                            Text("SKU: ${product.sku}", fontSize = 10.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f))
                                         }
+                                        val stockText = if (product.unit != "un") String.format("%.2f %s", product.stockQuantity, product.unit) else "${product.stockQuantity.toInt()} ${product.unit}"
                                         Text(
-                                            "${product.stockQuantity} un",
+                                            stockText,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 12.sp,
-                                            color = if (product.stockQuantity <= 5) Color(0xFFD32F2F) else Color(0xFFFF9800)
+                                            color = if (product.stockQuantity <= 5) MaterialTheme.colors.error else MaterialTheme.colors.onSurface
                                         )
                                     }
                                 }
@@ -435,7 +451,7 @@ fun ReportsScreen() {
                             Text(
                                 "+${lowStockProducts.size - 5} produtos",
                                 fontSize = 11.sp,
-                                color = Color.Gray,
+                                color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
                                 modifier = Modifier.padding(top = 4.dp)
                             )
                         }

@@ -52,14 +52,38 @@ class SaleDao {
                 }
 
                 val generatedKeys = saleStmt.generatedKeys
-                val saleId = if (generatedKeys != null && generatedKeys.next()) {
-                    generatedKeys.getLong(1)
-                } else {
-                    // fallback para last_insert_rowid()
-                    conn.createStatement().use { idStmt ->
-                        idStmt.executeQuery("SELECT last_insert_rowid()") .use { idRs ->
-                            if (idRs.next()) idRs.getLong(1) else 0L
+                var saleId: Long = 0L
+                try {
+                    if (generatedKeys == null) {
+                        println("→ generatedKeys is null")
+                    } else {
+                        println("→ generatedKeys available: meta = ${generatedKeys.metaData?.columnCount}")
+                        if (generatedKeys.next()) {
+                            saleId = generatedKeys.getLong(1)
+                            println("→ generatedKeys.next() = true, id = $saleId")
+                        } else {
+                            println("→ generatedKeys.next() = false")
                         }
+                    }
+                } catch (e: Exception) {
+                    println("✗ Erro lendo generatedKeys: ${e.message}")
+                }
+
+                if (saleId == 0L) {
+                    // fallback para last_insert_rowid()
+                    try {
+                        conn.createStatement().use { idStmt ->
+                            idStmt.executeQuery("SELECT last_insert_rowid()") .use { idRs ->
+                                if (idRs.next()) {
+                                    saleId = idRs.getLong(1)
+                                    println("→ last_insert_rowid() = $saleId")
+                                } else {
+                                    println("→ last_insert_rowid() retornou vazio")
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        println("✗ Erro ao executar fallback last_insert_rowid(): ${e.message}")
                     }
                 }
 
@@ -79,7 +103,7 @@ class SaleDao {
                     sale.items.forEach { item ->
                         itemStmt.setLong(1, saleId)
                         itemStmt.setLong(2, item.product.id)
-                        itemStmt.setInt(3, item.quantity)
+                        itemStmt.setDouble(3, item.quantity)
                         itemStmt.setDouble(4, item.unitPrice)
                         itemStmt.setDouble(5, item.total)
                         itemStmt.setDouble(6, item.discount)
