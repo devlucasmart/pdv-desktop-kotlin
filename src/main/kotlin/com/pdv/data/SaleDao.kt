@@ -120,6 +120,24 @@ class SaleDao {
                     }
                 }
 
+                // Se a venda trouxe partes de pagamento, persistir na mesma transação
+                try {
+                    if (sale.paymentParts.isNotEmpty()) {
+                        val partStmt = conn.prepareStatement("INSERT INTO payment_part (sale_id, method, amount, auth_code, created_at) VALUES (?, ?, ?, ?, datetime('now'))")
+                        sale.paymentParts.forEach { p ->
+                            partStmt.setLong(1, saleId)
+                            partStmt.setString(2, p.first)
+                            partStmt.setDouble(3, p.second)
+                            val code = java.util.UUID.randomUUID().toString().replace("-", "").take(16)
+                            partStmt.setString(4, code)
+                            partStmt.executeUpdate()
+                        }
+                        println("→ Partes de pagamento salvas: ${sale.paymentParts.size}")
+                    }
+                } catch (e: Exception) {
+                    println("✗ Falha ao salvar partes de pagamento dentro da venda: ${e.message}")
+                }
+
                 println("✓ Venda salva com sucesso (ID: $saleId, Total: R$ %.2f)".format(sale.total))
 
                 // Se remote configured, enfileirar payload para sync
@@ -373,14 +391,23 @@ class SaleDao {
     }
 
     private fun createSaleFromResultSet(rs: java.sql.ResultSet): Sale {
+        val saleId = rs.getLong("id")
+        // carregar partes de pagamento
+        val partDao = PaymentPartDao()
+        val parts = try {
+            partDao.findBySaleId(saleId).map { it.method to it.amount }
+        } catch (e: Exception) {
+            emptyList()
+        }
         return Sale(
-            id = rs.getLong("id"),
+            id = saleId,
             dateTime = rs.getString("date_time"),
             items = emptyList(),
             discount = rs.getDouble("discount"),
             paymentMethod = rs.getString("payment_method"),
             status = rs.getString("status"),
             operatorName = rs.getString("operator_name"),
+            paymentParts = parts,
             _total = rs.getDouble("total"),
             _subtotal = rs.getDouble("subtotal")
         )

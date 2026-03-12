@@ -20,6 +20,10 @@ import androidx.compose.ui.unit.sp
 import com.pdv.data.PaymentMethod
 import com.pdv.util.CurrencyUtils
 import kotlin.math.max
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.*
+import kotlinx.coroutines.launch
 
 @Composable
 fun PaymentDialog(
@@ -215,6 +219,214 @@ fun PaymentDialog(
             ) {
                 Text("Cancelar")
             }
+        }
+    )
+}
+
+// NOTE: we will provide a new composable below with the actual implementation and a clearer signature.
+@Composable
+fun PaymentDialogSplit(
+    total: Double,
+    onDismiss: () -> Unit,
+    onConfirm: (payments: List<Pair<String, Double>>) -> Unit
+){
+    // payments: list of pairs (paymentMethodName, amount)
+    var selectedMethod by remember { mutableStateOf(PaymentMethod.DINHEIRO) }
+    var amountText by remember { mutableStateOf("") }
+    val parsedAmount = CurrencyUtils.parse(amountText)
+    val amountFocusRequester = remember { FocusRequester() }
+    val dialogScope = rememberCoroutineScope()
+
+    // Keep a list of payment parts
+    val parts = remember { mutableStateListOf<Pair<PaymentMethod, Double>>() }
+
+    fun partsSum(): Double = parts.sumOf { it.second }
+    val remaining = (total - partsSum()).coerceAtLeast(0.0)
+
+    // request focus when dialog opens
+    LaunchedEffect(Unit) {
+        try { amountFocusRequester.requestFocus() } catch (_: Exception) {}
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Payment, null, tint = MaterialTheme.colors.primary, modifier = Modifier.size(28.dp))
+                Spacer(Modifier.width(12.dp))
+                Text("Finalizar Pagamento", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            }
+        },
+        text = {
+            Column(modifier = Modifier.widthIn(max = 640.dp)
+                .onKeyEvent { keyEvent ->
+                    if (keyEvent.type == KeyEventType.KeyDown) {
+                        when (keyEvent.key) {
+                            Key.R -> {
+                                // preencher restante
+                                if (remaining > 0.0) {
+                                    amountText = "%.2f".format(remaining).replace('.', ',')
+                                }
+                                true
+                            }
+                            Key.Enter -> {
+                                // adicionar parte se valor válido
+                                val amt = CurrencyUtils.parse(amountText)
+                                if (amt > 0.0) {
+                                    parts.add(selectedMethod to amt)
+                                    amountText = ""
+                                    // refocar
+                                    dialogScope.launch { try { amountFocusRequester.requestFocus() } catch (_: Exception) {} }
+                                }
+                                true
+                            }
+                            else -> false
+                        }
+                    } else false
+                }
+             ) {
+                // Total a pagar - destaque grande e moderno
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    backgroundColor = MaterialTheme.colors.primary,
+                    elevation = 6.dp,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(vertical = 16.dp, horizontal = 20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("TOTAL A PAGAR", color = Color.White.copy(alpha = 0.9f), fontSize = 13.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Text(CurrencyUtils.format(total), color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.ExtraBold)
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Partes adicionadas em um card
+                Card(modifier = Modifier.fillMaxWidth(), elevation = 2.dp, shape = RoundedCornerShape(8.dp)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text("Pagamentos adicionados", fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+
+                        if (parts.isEmpty()) {
+                            Text("Nenhuma parte adicionada.", color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f))
+                        } else {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                parts.forEachIndexed { idx, p ->
+                                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Column {
+                                            Text(p.first.displayName, fontWeight = FontWeight.Medium)
+                                            Text(CurrencyUtils.format(p.second), color = MaterialTheme.colors.onSurface.copy(alpha = 0.8f))
+                                        }
+                                        IconButton(onClick = { parts.removeAt(idx) }) {
+                                            Icon(Icons.Default.Delete, contentDescription = "Remover parte")
+                                        }
+                                    }
+                                    if (idx < parts.lastIndex) Divider()
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Total pago:", fontWeight = FontWeight.Bold)
+                            Text(CurrencyUtils.format(partsSum()), fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Restante:", fontWeight = FontWeight.Bold)
+                            Text(CurrencyUtils.format(remaining), fontWeight = FontWeight.Bold, color = if (remaining > 0) MaterialTheme.colors.error else MaterialTheme.colors.primary)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Selector de métodos com estilo - usar cards compactos
+                Text("Forma de pagamento", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    val methods = PaymentMethod.values().toList()
+                    // layout em duas linhas quando necessário
+                    methods.chunked(3).forEach { rowMethods ->
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            rowMethods.forEach { method ->
+                                Box(modifier = Modifier.weight(1f)) {
+                                    PaymentMethodCard(method = method, isSelected = selectedMethod == method, onClick = { selectedMethod = method }, modifier = Modifier.fillMaxWidth())
+                                }
+                            }
+                            if (rowMethods.size < 3) {
+                                repeat(3 - rowMethods.size) { Spacer(modifier = Modifier.weight(1f)) }
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Campo de valor e botões rápidos
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = if (amountText.isBlank()) "" else CurrencyUtils.formatPlain(parsedAmount),
+                        onValueChange = { v -> amountText = v.filter { ch -> ch.isDigit() || ch == ',' || ch == '.' } },
+                        label = { Text("Valor") },
+                        singleLine = true,
+                        leadingIcon = { Text("R$", fontWeight = FontWeight.Bold) },
+                        modifier = Modifier.weight(1f).focusRequester(amountFocusRequester)
+                    )
+
+                    Column(modifier = Modifier.width(220.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // botões rápidos menores e consistentes
+                            listOf(remaining, 20.0, 50.0, 100.0).forEach { v ->
+                                val isRest = v == remaining && remaining > 0.0
+                                Button(
+                                    onClick = { amountText = "%.2f".format(v).replace('.', ',') },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(6.dp),
+                                    colors = if (isRest) ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary, contentColor = Color.White) else ButtonDefaults.outlinedButtonColors()
+                                ) {
+                                    Text(if (v == remaining) "Restante" else "R$ ${v.toInt()}")
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        Button(onClick = {
+                            val amt = CurrencyUtils.parse(amountText).coerceAtLeast(0.0)
+                            if (amt > 0.0) {
+                                parts.add(selectedMethod to amt)
+                                amountText = ""
+                                // refocar no campo de valor
+                                dialogScope.launch { try { amountFocusRequester.requestFocus() } catch (_: Exception) {} }
+                            }
+                        }, enabled = CurrencyUtils.parse(amountText) > 0.0, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Adicionar Parte")
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
+                Text("Dica: adicione a parte em dinheiro primeiro para que o troco seja calculado no caixa.", fontSize = 12.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f))
+            }
+        },
+        confirmButton = {
+            val sum = parts.sumOf { it.second }
+            val can = sum >= total
+            Button(onClick = {
+                // convert to simple list of pair<string,double>
+                val out = parts.map { it.first.name to it.second }
+                onConfirm(out)
+            }, enabled = can, colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary)) {
+                Icon(Icons.Default.Check, null); Spacer(Modifier.width(8.dp)); Text("Confirmar Pagamentos")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) { Text("Cancelar") }
         }
     )
 }

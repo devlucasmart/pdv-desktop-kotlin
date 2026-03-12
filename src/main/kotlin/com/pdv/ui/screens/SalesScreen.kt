@@ -2,6 +2,7 @@ package com.pdv.ui.screens
 
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,8 +27,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pdv.data.*
 import com.pdv.ui.components.PaymentDialog
+import com.pdv.ui.components.PaymentDialogSplit
 import com.pdv.util.CurrencyUtils
 import com.pdv.util.NumberUtils
+import com.pdv.util.PdfUtils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
@@ -47,13 +50,73 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
     var showSuccessDialog by remember { mutableStateOf(false) }
     var showDiscountDialog by remember { mutableStateOf(false) }
     var lastAddedProduct by remember { mutableStateOf<String?>(null) }
+    var lastSaleForReceipt by remember { mutableStateOf<Sale?>(null) }
 
     val productDao = remember { ProductDao() }
     val saleDao = remember { SaleDao() }
+    val paymentPartDao = remember { com.pdv.data.PaymentPartDao() }
     val cashDao = remember { CashRegisterDao() }
     val clientDao = remember { ClientDao() }
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
+    // FocusRequester para capturar atalhos no diálogo de sucesso
+    val dialogFocusRequester = remember { FocusRequester() }
+
+    // helper functions for export/print/view (local so they can use snackbarHostState)
+    suspend fun exportReceiptAction(sale: Sale) {
+        try {
+            val folder = java.io.File(System.getProperty("user.home"), "pdv_receipts/${java.time.LocalDate.now()}")
+            if (!folder.exists()) folder.mkdirs()
+            val timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
+            val out = java.io.File(folder, "sale_${sale.id}_$timestamp.pdf")
+            com.pdv.util.PdfUtils.generateReceiptPdf(sale, out)
+            snackbarHostState.showSnackbar("✓ PDF salvo: ${out.absolutePath}")
+        } catch (e: Exception) {
+            e.printStackTrace()
+            snackbarHostState.showSnackbar("✗ Erro ao gerar PDF: ${e.message}")
+        }
+    }
+
+    suspend fun printReceiptAction(sale: Sale) {
+        try {
+            val folder = java.io.File(System.getProperty("java.io.tmpdir"))
+            val timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
+            val out = java.io.File(folder, "sale_${sale.id}_$timestamp.pdf")
+            com.pdv.util.PdfUtils.generateReceiptPdf(sale, out)
+            val ok = com.pdv.util.PdfUtils.printPdf(out)
+            if (ok) snackbarHostState.showSnackbar("✓ Enviado para impressora") else snackbarHostState.showSnackbar("✗ Erro ao imprimir")
+        } catch (e: Exception) {
+            e.printStackTrace()
+            snackbarHostState.showSnackbar("✗ Erro na impressão: ${e.message}")
+        }
+    }
+
+    suspend fun viewReceiptAction(sale: Sale) {
+        try {
+            val folder = java.io.File(System.getProperty("java.io.tmpdir"))
+            val timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
+            val out = java.io.File(folder, "sale_preview_${sale.id}_$timestamp.pdf")
+            com.pdv.util.PdfUtils.generateReceiptPdf(sale, out)
+            try {
+                val desktop = java.awt.Desktop.getDesktop()
+                desktop.open(out)
+                snackbarHostState.showSnackbar("✓ Abrindo visualizador: ${out.name}")
+            } catch (inner: Exception) {
+                snackbarHostState.showSnackbar("✓ PDF gerado: ${out.absolutePath}")
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            snackbarHostState.showSnackbar("✗ Erro ao gerar/abrir PDF: ${e.message}")
+        }
+    }
+
+    // Request focus on dialog to capture key events when it opens
+    LaunchedEffect(showSuccessDialog, lastSaleForReceipt) {
+        if (showSuccessDialog && lastSaleForReceipt != null) {
+            kotlinx.coroutines.delay(60)
+            try { dialogFocusRequester.requestFocus() } catch (_: Exception) {}
+        }
+    }
 
     var currentSession by remember { mutableStateOf<CashSession?>(null) }
     var isProcessing by remember { mutableStateOf(false) }
@@ -797,43 +860,41 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
 
     // Dialog de Pagamento
     if (showPaymentDialog) {
-        PaymentDialog(
+        PaymentDialogSplit(
             total = total,
             onDismiss = { showPaymentDialog = false },
-            onConfirm = { paymentMethod, receivedAmount ->
-                // Fechar dialog imediatamente
+            onConfirm = { payments ->
+                // payments: List<Pair<paymentMethodName, amount>>
                 showPaymentDialog = false
                 isProcessing = true
 
                 scope.launch {
                     try {
-                        println("=== INICIANDO PROCESSO DE VENDA ===")
+                        println("=== INICIANDO PROCESSO DE VENDA (SPLIT) ===")
                         val currentUser = UserSession.getCurrentUser()
                         println("Usuário: ${currentUser?.fullName}")
 
-                        // Criar cópia dos itens antes de limpar
                         val saleItems = items.toList()
                         val saleDiscount = discount
                         val saleTotal = total
 
+                        // determine payment method summary
+                        val methodName = if (payments.size == 1) payments.first().first else "MIXED"
+
                         println("Itens no carrinho: ${saleItems.size}")
                         println("Total: R$ $saleTotal")
                         println("Desconto: R$ $saleDiscount")
-                        println("Método: $paymentMethod")
+                        println("Método: $methodName")
 
                         val sale = Sale(
                             items = saleItems,
                             discount = saleDiscount,
-                            paymentMethod = paymentMethod,
+                            paymentMethod = methodName,
+                            paymentParts = payments.map { it.first to it.second },
                             operatorName = currentUser?.fullName ?: "Desconhecido",
                             clientId = selectedClient?.id,
                             clientDiscount = clientAppliedDiscount
                         )
-
-                        println("Venda criada. Salvando no banco...")
-                        println("  - Subtotal: ${sale.subtotal}")
-                        println("  - Total: ${sale.total}")
-                        println("  - Status: ${sale.status}")
 
                         val saleId = saleDao.save(sale)
                         println("Resultado do save: saleId = $saleId")
@@ -848,11 +909,12 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                                 productDao.update(product.copy(stockQuantity = newStock))
                             }
 
-                            // Registrar movimento no caixa (para dinheiro)
-                            if (paymentMethod == PaymentMethod.DINHEIRO.name) {
+                            // Registrar movimento no caixa apenas para a parte em dinheiro
+                            val cashAmount = payments.filter { it.first == PaymentMethod.DINHEIRO.name }.sumOf { it.second }
+                            if (cashAmount > 0) {
                                 currentSession?.let { session ->
-                                    println("Registrando movimento no caixa (sessão ${session.id})...")
-                                    cashDao.recordMovement(session.id, "SALE", saleTotal, "Venda #$saleId")
+                                    println("Registrando movimento em dinheiro no caixa (sessão ${session.id}) valor R$ $cashAmount")
+                                    cashDao.recordMovement(session.id, "SALE", cashAmount, "Venda #$saleId")
                                 }
                             }
 
@@ -860,6 +922,8 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                             clearCart()
 
                             // Mostrar sucesso
+                            val recordedSale = sale.copy(id = saleId)
+                            lastSaleForReceipt = recordedSale
                             showSuccessDialog = true
                             scope.launch { snackbarHostState.showSnackbar("✓ Venda #$saleId finalizada!") }
                         } else {
@@ -879,41 +943,134 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
         )
     }
 
-    // Dialog de Sucesso
-    if (showSuccessDialog) {
-        AlertDialog(
-            onDismissRequest = { showSuccessDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colors.primary, modifier = Modifier.size(32.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text("Venda Concluída!", color = MaterialTheme.colors.primary)
-                }
-            },
-            text = {
-                Column {
-                    Text("A venda foi registrada com sucesso!")
-                    Spacer(Modifier.height(8.dp))
-                    Text("O carrinho foi limpo e está pronto para uma nova venda.", fontSize = 14.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f))
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showSuccessDialog = false
-                        // Refocar no campo de SKU
-                        scope.launch {
-                            delay(100)
-                            try { focusRequester.requestFocus() } catch (_: Exception) {}
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary)
-                ) {
-                    Text("Nova Venda", color = Color.White)
-                }
-            }
-        )
-    }
+    // Dialog de Sucesso (simplificado) - show only when we don't have a sale ready for receipt
+    if (showSuccessDialog && lastSaleForReceipt == null) {
+         AlertDialog(
+             onDismissRequest = { showSuccessDialog = false },
+             title = {
+                 Row(verticalAlignment = Alignment.CenterVertically) {
+                     Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colors.primary, modifier = Modifier.size(32.dp))
+                     Spacer(Modifier.width(12.dp))
+                     Text("Venda Concluída!", color = MaterialTheme.colors.primary)
+                 }
+             },
+             text = {
+                 Column {
+                     Text("A venda foi registrada com sucesso!")
+                     Spacer(Modifier.height(8.dp))
+                     Text("O carrinho foi limpo e está pronto para uma nova venda.", fontSize = 14.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f))
+                 }
+             },
+             confirmButton = {
+                 Button(
+                     onClick = {
+                         showSuccessDialog = false
+                         // Refocar no campo de SKU
+                         scope.launch {
+                             delay(100)
+                             try { focusRequester.requestFocus() } catch (_: Exception) {}
+                         }
+                     },
+                     colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary)
+                 ) {
+                     Text("Nova Venda", color = Color.White)
+                 }
+             }
+         )
+     }
+
+    // Extended success dialog with print/export options (shown when lastSaleForReceipt available)
+     if (showSuccessDialog && lastSaleForReceipt != null) {
+         AlertDialog(
+             onDismissRequest = { showSuccessDialog = false },
+             title = { Text("Venda Concluída") },
+             text = {
+                 // attach key handler to this column so E/P/V keyboard shortcuts trigger actions
+                 Column(modifier = Modifier
+                     .onKeyEvent { keyEvent ->
+                         if (keyEvent.type == KeyEventType.KeyDown) {
+                             val k = keyEvent.key
+                             when (k) {
+                                 androidx.compose.ui.input.key.Key.E -> {
+                                     lastSaleForReceipt?.let {
+                                         scope.launch { exportReceiptAction(it) }
+                                     }
+                                     true
+                                 }
+                                 androidx.compose.ui.input.key.Key.P -> {
+                                     lastSaleForReceipt?.let {
+                                         scope.launch { printReceiptAction(it) }
+                                     }
+                                     true
+                                 }
+                                 androidx.compose.ui.input.key.Key.V -> {
+                                     lastSaleForReceipt?.let {
+                                         scope.launch { viewReceiptAction(it) }
+                                     }
+                                     true
+                                 }
+                                 else -> false
+                             }
+                         } else false
+                     }
+                     .focusRequester(dialogFocusRequester)
+                     .focusable()
+                 ) {
+                     Text("Deseja imprimir o cupom fiscal ou exportar em PDF? (Atalhos: E=Exportar, P=Imprimir, V=Visualizar)")
+                     Spacer(Modifier.height(8.dp))
+                 }
+             },
+             confirmButton = {
+                 Row {
+                     Button(onClick = {
+                         // Export PDF
+                         scope.launch {
+                             lastSaleForReceipt?.let { exportReceiptAction(it) }
+                             showSuccessDialog = false
+                             lastSaleForReceipt = null
+                          }
+                      }, colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary)) {
+                         Icon(Icons.Default.PictureAsPdf, null)
+                         Spacer(Modifier.width(8.dp))
+                         Text("Exportar PDF", color = Color.White)
+                     }
+
+                     Spacer(Modifier.width(8.dp))
+
+                     Button(onClick = {
+                         // Print
+                         scope.launch {
+                             lastSaleForReceipt?.let { printReceiptAction(it) }
+                             showSuccessDialog = false
+                             lastSaleForReceipt = null
+                          }
+                      }, colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.secondary)) {
+                         Icon(Icons.Default.Print, null)
+                         Spacer(Modifier.width(8.dp))
+                         Text("Imprimir", color = Color.White)
+                     }
+
+                     Spacer(Modifier.width(8.dp))
+
+                     // Visualizar
+                     Button(onClick = {
+                         scope.launch {
+                             lastSaleForReceipt?.let { viewReceiptAction(it) }
+                             showSuccessDialog = false
+                             lastSaleForReceipt = null
+                          }
+                      }, colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primaryVariant)) {
+                         Icon(Icons.Default.Visibility, null)
+                         Spacer(Modifier.width(8.dp))
+                         Text("Visualizar", color = Color.White)
+                     }
+                 }
+             },
+             dismissButton = {
+                 TextButton(onClick = { showSuccessDialog = false; lastSaleForReceipt = null }) { Text("Fechar") }
+             }
+         )
+     }
 
     // Client picker dialog
     if (showClientPicker) {

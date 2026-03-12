@@ -1,0 +1,35 @@
+# Ignore build outputs
+build/
+.gradle/
+
+# Kotlin/IDE
+*.iml
+.idea/
+.out/
+
+# Local DBs and logs
+pdv.db
+pdv_data.db
+pdv.log
+run.log
+
+# Exported receipts and temporary PDF
+pdv_receipts/
+*.pdf
+
+# Temporary
+*.tmp
+*.swp
+*~
+
+# Generated jars
+/libs/
+**/*.jar
+
+# Gradle wrapper
+gradle-wrapper.jar
+
+# OS files
+.DS_Store
+Thumbs.db
+

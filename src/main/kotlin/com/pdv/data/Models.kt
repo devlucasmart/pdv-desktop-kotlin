@@ -62,6 +62,8 @@ data class Sale(
     val paymentMethod: String? = null,
     val status: String = "COMPLETED",
     val operatorName: String? = null,
+    // paymentParts: list of pairs (methodName, amount) - not persisted directly by model, used by DAO
+    val paymentParts: List<Pair<String, Double>> = emptyList(),
     private val _total: Double = 0.0,
     private val _subtotal: Double = 0.0,
     // Referência opcional a cliente e desconto aplicado (valor absoluto)

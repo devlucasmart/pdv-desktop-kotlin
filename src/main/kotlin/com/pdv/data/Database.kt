@@ -217,6 +217,37 @@ object Database {
             )
         """)
 
+        // Partes de pagamento (para vendas com pagamento dividido)
+        conn.createStatement().executeUpdate("""
+            CREATE TABLE IF NOT EXISTS payment_part (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sale_id INTEGER NOT NULL,
+                method TEXT NOT NULL,
+                amount REAL NOT NULL CHECK(amount >= 0),
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (sale_id) REFERENCES sale(id) ON DELETE CASCADE
+            )
+        """)
+
+        // Garantir coluna auth_code (adicionada posteriormente)
+        try {
+            val rs = conn.createStatement().executeQuery("PRAGMA table_info(payment_part)")
+            val cols = mutableSetOf<String>()
+            while (rs.next()) {
+                cols.add(rs.getString("name"))
+            }
+            if (!cols.contains("auth_code")) {
+                try {
+                    conn.createStatement().executeUpdate("ALTER TABLE payment_part ADD COLUMN auth_code TEXT")
+                    println("→ Coluna 'auth_code' adicionada à tabela payment_part")
+                } catch (e: Exception) {
+                    println("✗ Falha ao adicionar coluna 'auth_code' em payment_part: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            // ignore
+        }
+
         // Tabela outbox para sincronização com servidor remoto (vendas pendentes)
         conn.createStatement().executeUpdate("""
             CREATE TABLE IF NOT EXISTS outbox_sale (

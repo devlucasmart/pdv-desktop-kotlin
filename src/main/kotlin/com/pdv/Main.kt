@@ -32,6 +32,9 @@ import com.pdv.util.PrinterService
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.system.exitProcess
+import java.awt.KeyEventDispatcher
+import java.awt.KeyboardFocusManager
+import java.awt.event.KeyEvent
 
 enum class Screen {
     VENDAS, CAIXA, PRODUTOS, CLIENTES, RELATORIOS, CONFIGURACOES, USUARIOS
@@ -45,6 +48,8 @@ object WindowManager {
         get() = _isFullscreen.value
         set(value) {
             _isFullscreen.value = value
+            // Persist both fullscreen and kiosk for compatibility
+            Config.fullscreen = value
             Config.kioskMode = value
         }
 
@@ -521,12 +526,13 @@ fun ConfigScreen() {
                                         Icon(
                                             Icons.Default.DarkMode,
                                             contentDescription = null,
-                                            tint = if (isDarkTheme) Color.Black else Color.White
+                                            tint = if (isDarkTheme) Color.White else Color(0xFFBBDEFB
+                                            )
                                         )
                                         Text(
                                             "Escuro",
                                             fontSize = 10.sp,
-                                            color = if (isDarkTheme) Color.Black else Color.White
+                                            color = if (isDarkTheme) Color.White else Color(0xFFBBDEFB)
                                         )
                                     }
                                 }
@@ -1105,6 +1111,27 @@ fun main() {
             size = DpSize(1200.dp, 800.dp)
         )
 
+        // Registrar dispatcher de atalho uma vez
+        val fullscreenKeyDispatcher = remember {
+            object : KeyEventDispatcher {
+                override fun dispatchKeyEvent(e: KeyEvent): Boolean {
+                    if (e.keyCode == KeyEvent.VK_F11 && e.id == KeyEvent.KEY_PRESSED) {
+                        WindowManager.toggleFullscreen()
+                        return true
+                    }
+                    return false
+                }
+            }
+        }
+
+        // Registra globalmente
+        DisposableEffect(Unit) {
+            KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(fullscreenKeyDispatcher)
+            onDispose {
+                KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(fullscreenKeyDispatcher)
+            }
+        }
+
         Window(
             onCloseRequest = {
                 EmbeddedServer.stop()
@@ -1121,19 +1148,10 @@ fun main() {
             LaunchedEffect(isFullscreen) {
                 if (isFullscreen) {
                     // Entra em tela cheia exclusiva
-                    if (graphicsDevice.isFullScreenSupported) {
-                        graphicsDevice.fullScreenWindow = window
-                    } else {
-                        // Fallback: maximiza e remove decorações
-                        window.extendedState = java.awt.Frame.MAXIMIZED_BOTH
-                    }
+                    WindowUtils.enterFullscreen(window)
                 } else {
                     // Sai da tela cheia
-                    graphicsDevice.fullScreenWindow = null
-                    window.extendedState = java.awt.Frame.NORMAL
-                    // Restaura tamanho
-                    window.setSize(1200, 800)
-                    window.setLocationRelativeTo(null)
+                    WindowUtils.exitFullscreen(window)
                 }
             }
 
