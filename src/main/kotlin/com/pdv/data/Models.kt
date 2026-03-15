@@ -68,7 +68,9 @@ data class Sale(
     private val _subtotal: Double = 0.0,
     // Referência opcional a cliente e desconto aplicado (valor absoluto)
     val clientId: Long? = null,
-    val clientDiscount: Double = 0.0
+    val clientDiscount: Double = 0.0,
+    // se true, criar dívida no nome do cliente mesmo que haja pagamento parcial/total
+    val chargeToAccount: Boolean = false
 ) {
     val total: Double
         get() = if (_total > 0.0) _total else items.sumOf { it.total } - discount - clientDiscount

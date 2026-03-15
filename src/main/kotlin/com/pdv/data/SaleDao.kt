@@ -138,6 +138,48 @@ class SaleDao {
                     println("✗ Falha ao salvar partes de pagamento dentro da venda: ${e.message}")
                 }
 
+                // Criar dívida do cliente:
+                // - chargeToAccount=true: toda a venda vai na conta (dívida = total, amountPaid = que foi pago agora)
+                // - chargeToAccount=false: apenas o que não foi coberto pelos pagamentos vira dívida
+                try {
+                    val paid = if (sale.paymentParts.isNotEmpty()) sale.paymentParts.sumOf { it.second } else 0.0
+                    if (sale.clientId != null && sale.chargeToAccount) {
+                        // Lançar venda inteira na conta do cliente
+                        val amountDue  = sale.total          // valor total da venda
+                        val amountPaid = paid.coerceAtMost(amountDue) // já pago agora
+                        val status     = if (amountPaid >= amountDue) "CLOSED" else "OPEN"
+                        val debtStmt = conn.prepareStatement(
+                            "INSERT INTO client_debt (client_id, sale_id, amount_due, amount_paid, description, status) VALUES (?, ?, ?, ?, ?, ?)"
+                        )
+                        debtStmt.setLong(1, sale.clientId)
+                        debtStmt.setLong(2, saleId)
+                        debtStmt.setDouble(3, amountDue)
+                        debtStmt.setDouble(4, amountPaid)
+                        debtStmt.setString(5, "Venda #$saleId fiado")
+                        debtStmt.setString(6, status)
+                        debtStmt.executeUpdate()
+                        println("→ Venda lançada na conta do cliente ${sale.clientId}: total R$ $amountDue, pago R$ $amountPaid, status=$status")
+                    } else if (sale.clientId != null) {
+                        // Criar dívida apenas pelo valor não coberto
+                        val outstanding = (sale.total - paid).coerceAtLeast(0.0)
+                        if (outstanding > 0.0) {
+                            val debtStmt = conn.prepareStatement(
+                                "INSERT INTO client_debt (client_id, sale_id, amount_due, amount_paid, description, status) VALUES (?, ?, ?, ?, ?, ?)"
+                            )
+                            debtStmt.setLong(1, sale.clientId)
+                            debtStmt.setLong(2, saleId)
+                            debtStmt.setDouble(3, outstanding)
+                            debtStmt.setDouble(4, 0.0)
+                            debtStmt.setString(5, "Venda #$saleId - saldo aberto")
+                            debtStmt.setString(6, "OPEN")
+                            debtStmt.executeUpdate()
+                            println("→ Dívida criada para cliente ${sale.clientId}, R$ $outstanding (venda $saleId)")
+                        }
+                    }
+                } catch (e: Exception) {
+                    println("✗ Falha ao criar registro de dívida do cliente: ${e.message}")
+                }
+
                 println("✓ Venda salva com sucesso (ID: $saleId, Total: R$ %.2f)".format(sale.total))
 
                 // Se remote configured, enfileirar payload para sync
@@ -399,6 +441,11 @@ class SaleDao {
         } catch (e: Exception) {
             emptyList()
         }
+
+        // try to read client info if present
+        val clientId = try { rs.getLong("client_id") } catch (_: Exception) { 0L }
+        val clientDiscount = try { rs.getDouble("client_discount") } catch (_: Exception) { 0.0 }
+
         return Sale(
             id = saleId,
             dateTime = rs.getString("date_time"),
@@ -409,7 +456,9 @@ class SaleDao {
             operatorName = rs.getString("operator_name"),
             paymentParts = parts,
             _total = rs.getDouble("total"),
-            _subtotal = rs.getDouble("subtotal")
+            _subtotal = rs.getDouble("subtotal"),
+            clientId = if (clientId == 0L) null else clientId,
+            clientDiscount = clientDiscount
         )
     }
 }

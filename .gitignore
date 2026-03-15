@@ -1,35 +1,46 @@
-# Ignore build outputs
-build/
+# Gradle/IntelliJ
 .gradle/
-
-# Kotlin/IDE
-*.iml
+build/
+**/build/
+.gradle
 .idea/
-.out/
+*.iml
+out/
 
-# Local DBs and logs
-pdv.db
-pdv_data.db
-pdv.log
-run.log
-
-# Exported receipts and temporary PDF
-pdv_receipts/
-*.pdf
-
-# Temporary
-*.tmp
-*.swp
-*~
-
-# Generated jars
-/libs/
-**/*.jar
-
-# Gradle wrapper
-gradle-wrapper.jar
-
-# OS files
+# OS
 .DS_Store
 Thumbs.db
 
+# Logs and runtime
+*.log
+run-output.txt
+build-output.txt
+classes-output.txt
+run.log
+pdv.log
+
+# Database
+pdv_data.db
+pdv.db
+*.db
+
+# Receipts / temp PDFs
+pdv_receipts/
+*.pdf
+/tmp/
+
+# Kotlin/Java
+*.class
+*.jar
+*.war
+
+# Misc
+.pdv/
+.vscode/
+
+# Node
+node_modules/
+
+# Ignore packaging artifacts
+*.zip
+*.tar.gz

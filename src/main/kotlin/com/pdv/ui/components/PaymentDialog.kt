@@ -228,7 +228,9 @@ fun PaymentDialog(
 fun PaymentDialogSplit(
     total: Double,
     onDismiss: () -> Unit,
-    onConfirm: (payments: List<Pair<String, Double>>) -> Unit
+    onConfirm: (payments: List<Pair<String, Double>>) -> Unit,
+    chargeToAccount: Boolean = false,
+    clientName: String? = null
 ){
     // payments: list of pairs (paymentMethodName, amount)
     var selectedMethod by remember { mutableStateOf(PaymentMethod.DINHEIRO) }
@@ -416,13 +418,51 @@ fun PaymentDialogSplit(
         },
         confirmButton = {
             val sum = parts.sumOf { it.second }
-            val can = sum >= total
-            Button(onClick = {
-                // convert to simple list of pair<string,double>
-                val out = parts.map { it.first.name to it.second }
-                onConfirm(out)
-            }, enabled = can, colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary)) {
-                Icon(Icons.Default.Check, null); Spacer(Modifier.width(8.dp)); Text("Confirmar Pagamentos")
+            // Se chargeToAccount, pode confirmar mesmo sem pagar (vai na conta do cliente)
+            val can = if (chargeToAccount) true else sum >= total
+            Column {
+                // Banner de aviso quando vai para conta
+                if (chargeToAccount && clientName != null) {
+                    Card(
+                        backgroundColor = Color(0xFFFFF3E0),
+                        shape = RoundedCornerShape(8.dp),
+                        elevation = 0.dp,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.AccountBalance, null,
+                                tint = Color(0xFFE65100), modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Column {
+                                Text("Lançar na conta de $clientName",
+                                    fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFE65100))
+                                val pago = parts.sumOf { it.second }
+                                val restante = (total - pago).coerceAtLeast(0.0)
+                                if (restante > 0)
+                                    Text("R$ ${"%.2f".format(restante)} ficará em aberto",
+                                        fontSize = 11.sp, color = Color(0xFFBF360C))
+                                else
+                                    Text("Venda inteira será registrada no histórico",
+                                        fontSize = 11.sp, color = Color(0xFF2E7D32))
+                            }
+                        }
+                    }
+                }
+                Button(onClick = {
+                    val out = parts.map { it.first.name to it.second }
+                    onConfirm(out)
+                }, enabled = can, colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Check, null); Spacer(Modifier.width(8.dp))
+                    Text(if (chargeToAccount && parts.sumOf { it.second } < total)
+                        "Confirmar (restante vai para conta)"
+                    else "Confirmar Pagamentos")
+                }
             }
         },
         dismissButton = {

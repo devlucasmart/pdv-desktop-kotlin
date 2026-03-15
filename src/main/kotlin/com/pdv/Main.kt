@@ -20,7 +20,6 @@ import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.unit.DpSize
-import java.awt.GraphicsEnvironment
 import com.pdv.data.*
 import com.pdv.ui.screens.*
 import com.pdv.ui.theme.ThemeManager
@@ -1142,16 +1141,12 @@ fun main() {
             title = "PDV Desktop",
             state = windowState
         ) {
-            // Controla fullscreen usando AWT GraphicsDevice
-            val graphicsDevice = GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice
-
+            // Controla fullscreen via WindowPlacement (seguro para Compose Desktop)
             LaunchedEffect(isFullscreen) {
                 if (isFullscreen) {
-                    // Entra em tela cheia exclusiva
-                    WindowUtils.enterFullscreen(window)
+                    WindowUtils.enter(windowState)
                 } else {
-                    // Sai da tela cheia
-                    WindowUtils.exitFullscreen(window)
+                    WindowUtils.exit(windowState)
                 }
             }
 

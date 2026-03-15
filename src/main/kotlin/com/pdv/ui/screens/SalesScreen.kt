@@ -2,29 +2,33 @@ package com.pdv.ui.screens
 
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.pdv.data.*
 import com.pdv.ui.components.PaymentDialog
 import com.pdv.ui.components.PaymentDialogSplit
@@ -33,9 +37,6 @@ import com.pdv.util.NumberUtils
 import com.pdv.util.PdfUtils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.window.Dialog
 
 @Composable
 fun SalesScreen(snackbarHostState: SnackbarHostState) {
@@ -122,6 +123,7 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
     var isProcessing by remember { mutableStateOf(false) }
     var selectedClient by remember { mutableStateOf<Client?>(null) }
     var showClientPicker by remember { mutableStateOf(false) }
+    var chargeToAccount by remember { mutableStateOf(false) }
 
     // Carregar sessão atual
     LaunchedEffect(Unit) {
@@ -266,6 +268,8 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
         discount = 0.0
         clientAppliedDiscount = 0.0
         lastAddedProduct = null
+        selectedClient = null
+        chargeToAccount = false
     }
 
     val outerScroll = rememberScrollState()
@@ -306,41 +310,93 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                     elevation = 2.dp,
                     backgroundColor = MaterialTheme.colors.surface
                 ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column {
-                                Text("Vendas Hoje", fontSize = 12.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f))
-                                Text(
-                                    "${salesToday} vendas • ${CurrencyUtils.format(totalToday)}",
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colors.primary
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Text("Vendas Hoje", fontSize = 12.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f))
+                        Text(
+                            "${salesToday} vendas • ${CurrencyUtils.format(totalToday)}",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colors.primary
+                        )
+                    }
+                }
+            }
+
+            // ── Card de Cliente (separado, sempre visível) ─────────────
+            Card(
+                modifier = Modifier.fillMaxWidth().widthIn(max = maxContentWidth).padding(bottom = 8.dp),
+                elevation = if (selectedClient != null) 3.dp else 1.dp,
+                backgroundColor = when {
+                    chargeToAccount && selectedClient != null -> Color(0xFFFFF8E1)
+                    selectedClient != null -> MaterialTheme.colors.surface
+                    else -> MaterialTheme.colors.surface.copy(alpha = 0.7f)
+                },
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        if (selectedClient != null) Icons.Default.Person else Icons.Default.PersonAdd,
+                        null,
+                        tint = if (selectedClient != null) MaterialTheme.colors.primary
+                               else MaterialTheme.colors.onSurface.copy(alpha = 0.4f),
+                        modifier = Modifier.size(26.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+
+                    if (selectedClient != null) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(selectedClient!!.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            if (!selectedClient!!.document.isNullOrBlank())
+                                Text(selectedClient!!.document!!, fontSize = 11.sp,
+                                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f))
+                        }
+
+                        // Toggle FIADO com destaque
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (chargeToAccount) Color(0xFFE65100).copy(alpha = 0.12f)
+                                    else MaterialTheme.colors.onSurface.copy(alpha = 0.05f)
                                 )
-                            }
+                                .clickable { chargeToAccount = !chargeToAccount }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                if (chargeToAccount) Icons.Default.AccountBalance else Icons.Default.Payments,
+                                null,
+                                tint = if (chargeToAccount) Color(0xFFE65100) else MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                if (chargeToAccount) "FIADO" else "À vista",
+                                fontSize = 10.sp,
+                                fontWeight = if (chargeToAccount) FontWeight.ExtraBold else FontWeight.Normal,
+                                color = if (chargeToAccount) Color(0xFFE65100) else MaterialTheme.colors.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
 
-                            Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(8.dp))
 
-                            // Cliente selecionado e botão de seleção
-                            Column(horizontalAlignment = Alignment.End) {
-                                if (selectedClient != null) {
-                                    Text("Cliente: ${selectedClient?.name}", fontSize = 12.sp, color = MaterialTheme.colors.onSurface.copy(alpha = 0.8f))
-                                    Row {
-                                        OutlinedButton(onClick = { showClientPicker = true }) {
-                                            Text("Alterar Cliente", fontSize = 12.sp)
-                                        }
-                                        Spacer(Modifier.width(8.dp))
-                                        OutlinedButton(onClick = { selectedClient = null; clientAppliedDiscount = 0.0 }) {
-                                            Text("Remover", fontSize = 12.sp)
-                                        }
-                                    }
-                                } else {
-                                    OutlinedButton(onClick = { showClientPicker = true }) {
-                                        Text("Selecionar Cliente", fontSize = 12.sp)
-                                    }
-                                }
-                            }
+                        // Alterar / remover
+                        IconButton(onClick = { showClientPicker = true }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Edit, null, tint = MaterialTheme.colors.primary, modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = { selectedClient = null; clientAppliedDiscount = 0.0; chargeToAccount = false }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Close, null, tint = MaterialTheme.colors.onSurface.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
+                        }
+                    } else {
+                        Text("Nenhum cliente selecionado",
+                            modifier = Modifier.weight(1f),
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f))
+                        TextButton(onClick = { showClientPicker = true }) {
+                            Icon(Icons.Default.Search, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Selecionar", fontSize = 13.sp)
                         }
                     }
                 }
@@ -863,6 +919,8 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
         PaymentDialogSplit(
             total = total,
             onDismiss = { showPaymentDialog = false },
+            chargeToAccount = chargeToAccount,
+            clientName = selectedClient?.name,
             onConfirm = { payments ->
                 // payments: List<Pair<paymentMethodName, amount>>
                 showPaymentDialog = false
@@ -893,7 +951,8 @@ fun SalesScreen(snackbarHostState: SnackbarHostState) {
                             paymentParts = payments.map { it.first to it.second },
                             operatorName = currentUser?.fullName ?: "Desconhecido",
                             clientId = selectedClient?.id,
-                            clientDiscount = clientAppliedDiscount
+                            clientDiscount = clientAppliedDiscount,
+                            chargeToAccount = chargeToAccount
                         )
 
                         val saleId = saleDao.save(sale)

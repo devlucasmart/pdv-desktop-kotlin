@@ -106,7 +106,8 @@ object Database {
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
-        """)
+        """
+        )
 
         // Garantir coluna unit em esquemas antigos (se já existir sem a coluna)
         try {
@@ -143,7 +144,8 @@ object Database {
                 operator_name TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
-        """)
+        """
+        )
 
         // Tabela de itens de venda (quantity como REAL para suportar medidas fracionárias)
         conn.createStatement().executeUpdate("""
@@ -158,20 +160,24 @@ object Database {
                 FOREIGN KEY (sale_id) REFERENCES sale(id) ON DELETE CASCADE,
                 FOREIGN KEY (product_id) REFERENCES product(id)
             )
-        """)
+        """
+        )
 
         // Índices para melhor performance
         conn.createStatement().executeUpdate("""
             CREATE INDEX IF NOT EXISTS idx_product_sku ON product(sku)
-        """)
+        """
+        )
 
         conn.createStatement().executeUpdate("""
             CREATE INDEX IF NOT EXISTS idx_sale_date ON sale(date_time)
-        """)
+        """
+        )
 
         conn.createStatement().executeUpdate("""
             CREATE INDEX IF NOT EXISTS idx_sale_item_sale_id ON sale_item(sale_id)
-        """)
+        """
+        )
 
         // Tabela de usuários
         conn.createStatement().executeUpdate("""
@@ -184,12 +190,14 @@ object Database {
                 active INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
-        """)
+        """
+        )
 
         // Índice para usuários
         conn.createStatement().executeUpdate("""
             CREATE INDEX IF NOT EXISTS idx_user_username ON user(username)
-        """)
+        """
+        )
 
         // Tabela de sessões do caixa (caixa aberto/fechado)
         conn.createStatement().executeUpdate("""
@@ -202,7 +210,8 @@ object Database {
                 closing_amount REAL,
                 status TEXT NOT NULL DEFAULT 'OPEN'
             )
-        """)
+        """
+        )
 
         // Movimentos de caixa (entradas/saídas) ligados à sessão
         conn.createStatement().executeUpdate("""
@@ -215,7 +224,8 @@ object Database {
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 FOREIGN KEY (session_id) REFERENCES cash_register(id) ON DELETE CASCADE
             )
-        """)
+        """
+        )
 
         // Partes de pagamento (para vendas com pagamento dividido)
         conn.createStatement().executeUpdate("""
@@ -227,7 +237,8 @@ object Database {
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 FOREIGN KEY (sale_id) REFERENCES sale(id) ON DELETE CASCADE
             )
-        """)
+        """
+        )
 
         // Garantir coluna auth_code (adicionada posteriormente)
         try {
@@ -257,11 +268,13 @@ object Database {
                 status TEXT NOT NULL DEFAULT 'PENDING',
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
-        """)
+        """
+        )
 
         conn.createStatement().executeUpdate("""
             CREATE INDEX IF NOT EXISTS idx_outbox_status ON outbox_sale(status)
-        """)
+        """
+        )
 
         // Nova tabela de clientes
         conn.createStatement().executeUpdate("""
@@ -276,12 +289,14 @@ object Database {
                 active INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
-        """)
+        """
+        )
 
         // Índice para clients
         conn.createStatement().executeUpdate("""
             CREATE INDEX IF NOT EXISTS idx_client_name ON client(name)
-        """)
+        """
+        )
 
         // Garantir colunas client_id e client_discount na tabela sale
         try {
@@ -308,6 +323,30 @@ object Database {
             }
         } catch (e: Exception) {
             println("✗ Falha ao verificar/adicionar colunas de client em sale: ${e.message}")
+        }
+
+        // Tabela para controlar dívidas de clientes (parciais ou integrais)
+        try {
+            conn.createStatement().executeUpdate("""
+                CREATE TABLE IF NOT EXISTS client_debt (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    client_id INTEGER NOT NULL,
+                    sale_id INTEGER,
+                    amount_due REAL NOT NULL CHECK(amount_due >= 0),
+                    amount_paid REAL NOT NULL DEFAULT 0 CHECK(amount_paid >= 0),
+                    description TEXT,
+                    status TEXT NOT NULL DEFAULT 'OPEN',
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    paid_at TEXT
+                )
+            """
+            )
+            conn.createStatement().executeUpdate("""
+                CREATE INDEX IF NOT EXISTS idx_client_debt_client ON client_debt(client_id)
+            """
+            )
+        } catch (e: Exception) {
+            println("✗ Falha ao criar tabela client_debt: ${e.message}")
         }
 
         println("✓ Tabelas criadas com sucesso")
